@@ -8,7 +8,7 @@ MacroCaloriesTrack è un diario alimentare personale di Eric, ispirato a FatSecr
 
 ## Comandi
 
-- `npm install`: installa TypeScript, unica dipendenza di sviluppo.
+- `npm install`: installa le dipendenze di sviluppo (TypeScript e Playwright, versioni esatte).
 - `npm run build`: pulisce `dist/`, compila `src/` in `dist/js/`, copia `public/` e scrive versione e precache nel service worker (`scripts/build.mjs`).
 - `npm test`: test unitari con `node --test` sui moduli compilati in `dist/js/`. Richiede prima la build.
 - `npm run serve`: server statico su http://localhost:8080.
@@ -20,14 +20,16 @@ Dopo ogni modifica: `npm run build && npm test`. Dopo modifiche alla UI esegui a
 
 - `src/model.ts`: tipi, pasti, nutrienti nell'ordine dell'etichetta UE, `clean()`.
 - Moduli puri, senza DOM, testati in Node:
-  - `src/dates.ts`, `src/format.ts`, `src/nutrition.ts`;
-  - `src/crypto.ts`, `src/merge.ts`, `src/backup.ts`.
+  - `src/dates.ts`, `src/format.ts`, `src/nutrition.ts`, `src/search.ts`;
+  - `src/crypto.ts`, `src/merge.ts`, `src/backup.ts`;
+  - `src/catalog.ts` (banca dati svizzera), `src/off.ts` (Open Food Facts: URL, validazione, limiti).
+- `src/sources.ts`: caricamento della banca dati e chiamate a Open Food Facts con cache in IndexedDB.
 - `src/db.ts`: IndexedDB nativo. `src/repo.ts`: operazioni di dominio.
 - `src/ui.ts`: helper `h()`, toast, fogli modali (`<dialog>`), controlli. `src/components.ts`: elementi condivisi.
 - `src/router.ts`: routing su hash. `src/nav.ts`: `refresh()` della vista corrente.
 - `src/views/*`: diario, aggiunta, elenco alimenti, editor alimento, profilo, impostazioni, foglio quantità.
-- `public/`: `index.html` (con la CSP), `sw.js`, `css/app.css`, font, icone, manifest.
-- `tests/*.test.mjs`: test unitari. `tests/e2e/flow.e2e.mjs`: test end-to-end.
+- `public/`: `index.html` (con la CSP), `sw.js`, `css/app.css`, font, icone, manifest, `data/alimenti-ch.json` (generato da `scripts/import-ch.mjs`, non modificarlo a mano).
+- `tests/*.test.mjs`: test unitari. `tests/e2e/flow.e2e.mjs`: test end-to-end; Open Food Facts è sempre simulato con `route`, mai chiamato davvero.
 
 ## Regole non negoziabili
 

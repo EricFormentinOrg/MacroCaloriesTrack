@@ -1,14 +1,31 @@
 import { parseDecimal, toInput } from '../format.js';
 import { NUTRIENTS } from '../model.js';
-import type { Meal, NutrientKey, Nutrients, Serving, Unit } from '../model.js';
+import type { Food, Meal, NutrientKey, Nutrients, Serving, Unit } from '../model.js';
 import { checkFood } from '../nutrition.js';
 import * as repo from '../repo.js';
 import { confirmSheet, decimalInput, field, h, nextId, segmented, toast } from '../ui.js';
 
-// Nome digitato nella ricerca, passato all'editor quando si sceglie "Crea un alimento".
-let pendingName = '';
+/**
+ * Bozza per un nuovo alimento: il nome digitato nella ricerca ("Crea un alimento")
+ * o un prodotto di Open Food Facts da controllare prima del primo uso.
+ */
+export interface FoodDraft extends Partial<Omit<repo.FoodInput, 'id' | 'per100'>> {
+  per100?: Partial<Nutrients>;
+  notes?: string[];
+}
+
+let pendingDraft: FoodDraft = {};
 export function setPendingName(n: string): void {
-  pendingName = n;
+  pendingDraft = { name: n };
+}
+export function setPendingDraft(d: FoodDraft): void {
+  pendingDraft = d;
+}
+
+function provenance(f: Pick<Food, 'source' | 'sourceId'>): string | undefined {
+  if (f.source === 'ch') return `Copiato dalla Banca dati svizzera dei valori nutritivi (ID ${f.sourceId}). Le modifiche restano solo qui.`;
+  if (f.source === 'off') return `Copiato da Open Food Facts (codice ${f.sourceId}). Le modifiche restano solo qui.`;
+  return undefined;
 }
 
 const KJ_PER_KCAL = 4.184;
@@ -24,7 +41,12 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
     );
   }
 
-  let unit: Unit = food?.unit ?? 'g';
+  const draft: FoodDraft = isNew ? pendingDraft : {};
+  pendingDraft = {};
+  const origin = food ?? (draft.source ? { source: draft.source, sourceId: draft.sourceId } : undefined);
+  const originNote = origin ? provenance(origin) : undefined;
+
+  let unit: Unit = food?.unit ?? draft.unit ?? 'g';
   const unitTags: HTMLElement[] = [];
   const unitTag = () => {
     const el = h('span', { class: 'unit' }, unit);
@@ -32,9 +54,8 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
     return el;
   };
 
-  const name = h('input', { type: 'text', value: food?.name ?? pendingName, maxlength: 200, autocomplete: 'off', enterkeyhint: 'next' });
-  pendingName = '';
-  const brand = h('input', { type: 'text', value: food?.brand ?? '', maxlength: 200, autocomplete: 'off', enterkeyhint: 'next' });
+  const name = h('input', { type: 'text', value: food?.name ?? draft.name ?? '', maxlength: 200, autocomplete: 'off', enterkeyhint: 'next' });
+  const brand = h('input', { type: 'text', value: food?.brand ?? draft.brand ?? '', maxlength: 200, autocomplete: 'off', enterkeyhint: 'next' });
 
   const per100Title = h('h2', null, `Valori per 100 ${unit}`);
   const checks = h('div', { class: 'checks', 'aria-live': 'polite' });
@@ -51,7 +72,7 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
   });
 
   const nutrientRows = NUTRIENTS.flatMap((n) => {
-    const v = food?.per100[n.key];
+    const v = food ? food.per100[n.key] : draft.per100?.[n.key];
     const inp = decimalInput({ id: nextId('n'), value: v !== undefined ? toInput(v) : '', onInput: runChecks });
     inputs[n.key] = inp;
     const row = h('div', { class: `nrow${n.sub ? ' sub' : ''}` },
@@ -115,7 +136,7 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
     servingRows.push(row);
     servingList.append(row.el);
   }
-  (food?.servings ?? []).forEach(addServing);
+  (food?.servings ?? draft.servings ?? []).forEach(addServing);
 
   async function save(e: Event): Promise<void> {
     e.preventDefault();
@@ -146,10 +167,13 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
       id: food?.id,
       name: nm,
       brand: brand.value.trim() || undefined,
-      barcode: food?.barcode,
+      barcode: food?.barcode ?? draft.barcode,
       unit,
       per100: per100 as Nutrients,
       servings,
+      source: draft.source,
+      sourceId: draft.sourceId,
+      favorite: draft.favorite,
     });
     toast(isNew ? 'Alimento creato' : 'Alimento salvato');
     location.hash = ctx ? `#/aggiungi/${ctx.date}/${ctx.meal}/${saved.id}` : '#/alimenti';
@@ -175,7 +199,13 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
     h('header', { class: 'view-head' },
       h('a', { class: 'back', href: backHref }, ctx ? '‹ Aggiungi' : '‹ Alimenti'),
       h('h1', null, isNew ? 'Nuovo alimento' : 'Modifica alimento'),
+      originNote ? h('p', { class: 'muted source-note' }, originNote) : null,
     ),
+    draft.notes?.length
+      ? h('div', { class: 'review', role: 'note' },
+        h('p', null, 'Valori presi da Open Food Facts, inseriti da volontari: confrontali con l’etichetta prima di salvare.'),
+        ...draft.notes.map((n) => h('p', { class: 'warn' }, n)))
+      : null,
     h('form', { class: 'form', novalidate: true, onSubmit: save },
       field('Nome', name),
       field('Marca', brand, 'Facoltativa'),

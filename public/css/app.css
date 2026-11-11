@@ -220,6 +220,24 @@ a { color: var(--accent); }
   overflow: hidden;
 }
 .list li + li { border-top: 1px solid var(--rule); }
+/* Riga con stella dei preferiti: due pulsanti affiancati, mai annidati. */
+.list li.has-fav { display: flex; align-items: stretch; }
+.has-fav .row { flex: 1; min-width: 0; padding-right: 4px; }
+.fav-toggle {
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.fav-toggle[aria-pressed="true"] { color: var(--carbs); }
+.fav-toggle:active { background: var(--surface-2); }
+.fav-toggle:disabled { opacity: .5; }
 
 .row {
   display: flex;
@@ -264,6 +282,12 @@ a { color: var(--accent); }
 .list-title { font-family: var(--sans); font-size: .875rem; font-weight: 600; color: var(--ink-2); margin: 20px 0 6px; }
 .results > .list:first-child { margin-top: 12px; }
 .empty { color: var(--ink-2); padding: 14px 2px; }
+.res-group + .res-group { margin-top: 4px; }
+.off-cta { width: 100%; margin-top: 6px; }
+.off-hint { font-size: .8125rem; margin-top: 6px; }
+.source-note { font-size: .8125rem; }
+.review { background: var(--warn-bg); color: var(--warn-ink); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; margin-bottom: 16px; }
+.review .warn { background: none; padding: 0; }
 
 /* ---- Controlli */
 

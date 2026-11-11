@@ -7,18 +7,27 @@ export interface Meta {
   createdAt: number;
 }
 
+/** Cache locale di Open Food Facts: non è un dato utente, non va nel backup né in sincronizzazione. */
+export interface CacheRecord {
+  key: string;
+  at: number;
+  data: unknown;
+}
+
 export interface Stores {
   foods: Food;
   entries: Entry;
   weights: Weight;
   kv: Profile | Meta;
+  cache: CacheRecord;
 }
 
 export type StoreName = keyof Stores;
 export type Batch = { [K in StoreName]?: Stores[K][] };
 
 const DB_NAME = 'macro-calories-track';
-const DB_VERSION = 1;
+// 2: store "cache" per Open Food Facts.
+const DB_VERSION = 2;
 let dbp: Promise<IDBDatabase> | undefined;
 
 export function openDb(): Promise<IDBDatabase> {
@@ -30,6 +39,7 @@ export function openDb(): Promise<IDBDatabase> {
       if (!d.objectStoreNames.contains('entries')) d.createObjectStore('entries', { keyPath: 'id' }).createIndex('date', 'date');
       if (!d.objectStoreNames.contains('weights')) d.createObjectStore('weights', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('kv')) d.createObjectStore('kv', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('cache')) d.createObjectStore('cache', { keyPath: 'key' }).createIndex('at', 'at');
     };
     r.onsuccess = () => {
       const d = r.result;
@@ -103,7 +113,7 @@ export async function replaceAll(batch: Batch): Promise<void> {
 
 export async function clearAll(): Promise<void> {
   const d = await openDb();
-  const names: StoreName[] = ['foods', 'entries', 'weights', 'kv'];
+  const names: StoreName[] = ['foods', 'entries', 'weights', 'kv', 'cache'];
   const t = d.transaction(names, 'readwrite');
   for (const n of names) t.objectStore(n).clear();
   await done(t);
@@ -131,4 +141,29 @@ export async function recentEntries(max: number): Promise<Entry[]> {
     r.onerror = () => reject(r.error);
   });
   return out;
+}
+
+export async function clearStore(store: StoreName): Promise<void> {
+  const d = await openDb();
+  const t = d.transaction(store, 'readwrite');
+  t.objectStore(store).clear();
+  await done(t);
+}
+
+/** Tiene in cache solo i record più recenti di maxAge, al massimo maxCount. */
+export async function pruneCache(maxAge: number, maxCount: number, now = Date.now()): Promise<void> {
+  const d = await openDb();
+  const t = d.transaction('cache', 'readwrite');
+  const idx = t.objectStore('cache').index('at');
+  let kept = 0;
+  const r = idx.openCursor(null, 'prev');
+  r.onsuccess = () => {
+    const c = r.result;
+    if (!c) return;
+    const rec = c.value as CacheRecord;
+    if (now - rec.at > maxAge || kept >= maxCount) c.delete();
+    else kept++;
+    c.continue();
+  };
+  await done(t);
 }

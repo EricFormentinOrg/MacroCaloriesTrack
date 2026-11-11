@@ -117,7 +117,7 @@ try {
     await page.goto(`${BASE}#/aggiungi/${today}/${meal}`);
     await page.waitForSelector('.add');
     await page.fill('.search', food.split(' ')[0].toLowerCase());
-    await page.click(`.results .row:has-text("${food}")`);
+    await page.click(`.results [data-src="mine"] .row:has-text("${food}")`);
     await page.waitForSelector('dialog.sheet[open]');
     if (servingIdx !== undefined) await page.selectOption('dialog .qty-unit', String(servingIdx));
     await page.fill('dialog .qty-input', qty);
@@ -135,7 +135,7 @@ try {
   await page.goto(`${BASE}#/aggiungi/${today}/dinner`);
   await page.waitForSelector('.add');
   await page.fill('.search', 'olio extra');
-  assert.equal(await page.locator('.results .row').count(), 1);
+  assert.equal(await page.locator('.results [data-src="mine"] .row').count(), 1);
   await page.fill('.search', 'Bresaola');
   await page.click('text=Crea un alimento');
   await page.waitForSelector('.food-edit');
@@ -225,6 +225,124 @@ try {
   await page.reload();
   await page.waitForSelector('.meal .row', { timeout: 5000 });
   await ctx.setOffline(false);
+
+  // ---- Fase 2: banca dati svizzera, Open Food Facts (simulato), preferiti.
+  // Contesto nuovo senza service worker: page.route intercetta in modo affidabile e la CI non chiama mai OFF.
+  const off = { calls: [] };
+  const spaghetti = {
+    code: '8000000000017', product_name_it: 'Spaghetti integrali', brands: 'Pastificio Esempio', product_quantity_unit: 'g', serving_quantity: 80,
+    nutriments: { 'energy-kcal_100g': 350, fat_100g: 2.5, 'saturated-fat_100g': 0.5, carbohydrates_100g: 64, sugars_100g: 3, fiber_100g: 8, proteins_100g: 14, salt_100g: 0.01 },
+  };
+  const biscotti = { code: '8000000000031', product_name: 'Biscotti al cacao', brands: 'Forno Esempio', nutriments: { 'energy-kcal_100g': 480, fat_100g: 20 } };
+  const passata = {
+    code: '8000000000062', product_name_it: 'Passata di pomodoro', brands: 'Conserve Esempio', quantity: '700 g',
+    nutriments: { 'energy-kcal_100g': 36, fat_100g: 0.2, carbohydrates_100g: 6, sugars_100g: 5, proteins_100g: 1.4, salt_100g: 0.4 },
+  };
+  const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
+  await ctx2.addInitScript(() =>
+    document.addEventListener('securitypolicyviolation', (e) => console.error('CSP-VIOLATION', e.violatedDirective, e.blockedURI)),
+  );
+  await ctx2.route('https://world.openfoodfacts.org/**', async (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'X-User-Agent' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    off.calls.push({ path: u.pathname, q: u.searchParams.get('search_terms'), ua: req.headers()['x-user-agent'] });
+    const json = (body) => route.fulfill({ status: 200, contentType: 'application/json; charset=utf-8', headers: cors, body: JSON.stringify(body) });
+    if (u.pathname === '/cgi/search.pl' && u.searchParams.get('search_terms') === 'spaghetti integrali') {
+      return json({ count: 2, page: 1, page_size: 24, products: [spaghetti, biscotti] });
+    }
+    if (u.pathname === '/cgi/search.pl' && u.searchParams.get('search_terms') === 'nutella') {
+      // Come il servizio reale: pagina HTML senza header CORS, che il browser blocca.
+      return route.fulfill({ status: 503, contentType: 'text/html', body: '<!DOCTYPE html><title>Page temporarily unavailable</title>' });
+    }
+    if (u.pathname === '/api/v2/product/8000000000062.json') return json({ code: '8000000000062', status: 1, product: passata });
+    problems.push(`richiesta OFF inattesa: ${req.url()}`);
+    return route.fulfill({ status: 404, headers: cors, body: '' });
+  });
+  const p2 = await ctx2.newPage();
+  p2.on('console', (m) => { if (m.type() === 'error' && !/status of 503|blocked by CORS policy|net::ERR_FAILED/.test(m.text())) problems.push(`(fase 2) ${m.text()}`); });
+  p2.on('pageerror', (e) => problems.push(`pageerror(fase 2): ${e.message}`));
+  const qty = async (value) => {
+    await p2.waitForSelector('dialog.sheet[open]');
+    await p2.fill('dialog .qty-input', value);
+    await p2.click('dialog button:has-text("Aggiungi")');
+    await p2.waitForSelector('dialog.sheet', { state: 'detached' });
+  };
+
+  // Banca dati: primo uso = copia tra gli alimenti personali
+  await p2.goto(`${BASE}#/aggiungi/${today}/snack`);
+  await p2.waitForSelector('.add');
+  await p2.fill('.search', 'mela cruda');
+  await p2.click('[data-src="ch"] .row:has-text("Mela, cruda")');
+  await qty('150');
+  await p2.waitForSelector('[data-src="mine"] .row:has-text("Mela, cruda")');
+  assert.equal(await p2.locator('[data-src="ch"] .row:has-text("Mela, cruda")').count(), 0, 'la copia sostituisce la voce della banca dati');
+  await p2.screenshot({ path: `${SHOTS}/09-banca-dati.png`, fullPage: true });
+
+  // Preferito dalla banca dati
+  await p2.fill('.search', 'kiwi');
+  await p2.click('[data-src="ch"] li:has-text("Kiwi, crudo") .fav-toggle');
+  await p2.waitForSelector('[data-src="mine"] li:has-text("Kiwi, crudo") .fav-toggle[aria-pressed="true"]');
+  await p2.fill('.search', '');
+  await p2.waitForSelector('[data-src="fav"] .row:has-text("Kiwi, crudo")');
+
+  // Open Food Facts: ricerca testuale, prodotto completo e prodotto da controllare
+  await p2.fill('.search', 'spaghetti integrali');
+  await p2.click('.off-cta');
+  await p2.waitForSelector('[data-src="off"] .row:has-text("Spaghetti integrali")');
+  assert.match(await p2.textContent('[data-src="off"] li:has-text("Biscotti al cacao") .row-sub'), /da controllare/);
+  assert.match(off.calls[0].ua ?? '', /^MacroCaloriesTrack\/[0-9a-f]{10} \(\+http:\/\/localhost:8181\/\)$/, 'X-User-Agent');
+  await p2.screenshot({ path: `${SHOTS}/10-open-food-facts.png`, fullPage: true });
+  await p2.click('[data-src="off"] .row:has-text("Spaghetti integrali")');
+  await p2.waitForSelector('dialog .qty-unit option:has-text("porzione (80 g)")', { state: 'attached' });
+  await qty('80');
+  await p2.click('[data-src="off"] .row:has-text("Biscotti al cacao")');
+  await p2.waitForSelector('.food-edit .review');
+  assert.equal(await p2.inputValue('.food-edit .field input >> nth=0'), 'Biscotti al cacao');
+  assert.equal(await p2.inputValue('.food-edit .field input >> nth=1'), 'Forno Esempio');
+  await p2.screenshot({ path: `${SHOTS}/11-da-controllare.png`, fullPage: true });
+  const r2 = p2.locator('.nrow input');
+  await r2.nth(4).fill('65');
+  await r2.nth(7).fill('7');
+  await p2.click('button:has-text("Crea alimento")');
+  await qty('30');
+
+  // Codice a barre, poi la stessa richiesta servita dalla cache
+  await p2.fill('.search', '8000000000062');
+  assert.match(await p2.textContent('.off-cta'), /codice a barre/);
+  await p2.click('.off-cta');
+  await p2.waitForSelector('[data-src="off"] .row:has-text("Passata di pomodoro")');
+  const callsBefore = off.calls.length;
+  await p2.reload();
+  await p2.waitForSelector('.add');
+  await p2.fill('.search', '8000000000062');
+  await p2.click('.off-cta');
+  await p2.waitForSelector('[data-src="off"] .row:has-text("Passata di pomodoro")');
+  assert.equal(off.calls.length, callsBefore, 'seconda richiesta servita dalla cache');
+
+  // Servizio non disponibile (503): messaggio, nessun errore
+  await p2.fill('.search', 'nutella');
+  await p2.click('.off-cta');
+  await p2.waitForSelector('[data-src="off"] .form-error');
+  assert.match(await p2.textContent('[data-src="off"] .form-error'), /non accetta ricerche/);
+
+  // Alimenti: preferiti e provenienza
+  await p2.click('a[data-tab="alimenti"]');
+  await p2.waitForSelector('.foods [data-src="fav"] .row:has-text("Kiwi, crudo")');
+  await p2.click('.foods [data-src="fav"] li:has-text("Kiwi, crudo") .fav-toggle');
+  await p2.waitForFunction(() => !document.querySelector('.foods [data-src="fav"]'));
+  await p2.click('.foods .row:has-text("Mela, cruda")');
+  await p2.waitForSelector('.food-edit .source-note');
+  assert.match(await p2.textContent('.source-note'), /Banca dati svizzera.*ID 378/);
+
+  // Diario: tre voci nello spuntino, valori copiati.
+  // Mela 150 g (78 kcal) + spaghetti 80 g (280) + biscotti 30 g (144) = 502 kcal
+  await p2.goto(BASE + '#/');
+  await p2.waitForSelector('.diary');
+  assert.equal(await p2.locator('.meal:has(h2:text("Spuntino")) .row').count(), 3);
+  assert.match(await p2.textContent('.meal:has(h2:text("Spuntino")) .meal-kcal'), /^502\s*kcal$/);
+  await ctx2.close();
 
   // Tema scuro (contesto nuovo = database vuoto: reimporta il backup)
   const dark = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: 'dark' });

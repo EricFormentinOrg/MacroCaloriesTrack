@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <!-- Solo risorse dello stesso sito. Quando arrivano Dropbox (Fase 3) e Open Food Facts (Fase 2)
-       i loro domini vanno aggiunti a connect-src, e a nient'altro. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <!-- Solo risorse dello stesso sito. Unica eccezione: le chiamate API (connect-src) verso
+       Open Food Facts; con la Fase 3 si aggiungono i domini Dropbox, sempre e solo qui. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://world.openfoodfacts.org; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#EDF0EC" media="(prefers-color-scheme: light)">

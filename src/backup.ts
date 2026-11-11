@@ -1,6 +1,6 @@
 import { isISODate } from './dates.js';
-import { MEALS, clean, isMeal, mealLabel } from './model.js';
-import type { Entry, EntryServing, Food, Goal, NutrientKey, Nutrients, Profile, Serving, SyncRecord, Targets, Weight } from './model.js';
+import { FOOD_SOURCES, MEALS, clean, isMeal, mealLabel } from './model.js';
+import type { Entry, EntryServing, Food, FoodSource, Goal, NutrientKey, Nutrients, Profile, Serving, SyncRecord, Targets, Weight } from './model.js';
 import { entryNutrients } from './nutrition.js';
 
 export const BACKUP_APP = 'MacroCaloriesTrack';
@@ -103,6 +103,12 @@ function entryServing(v: unknown): EntryServing | undefined {
 
 function food(o: unknown): Food {
   need(isObj(o), 'record non valido');
+  // Backup precedenti alla Fase 2: source mancante o 'custom'.
+  const source: FoodSource = o.source === undefined ? 'custom' : (o.source as FoodSource);
+  need(FOOD_SOURCES.includes(source), 'campo “source” non valido');
+  const sourceId = optStr(o, 'sourceId', 32);
+  need(source === 'custom' ? sourceId === undefined : sourceId !== undefined && /^\d{1,14}$/.test(sourceId), 'campo “sourceId” non valido');
+  need(o.favorite === undefined || typeof o.favorite === 'boolean', 'campo “favorite” non valido');
   return clean({
     ...base(o),
     name: reqStr(o, 'name', 200),
@@ -111,7 +117,9 @@ function food(o: unknown): Food {
     unit: unit(o),
     per100: nutrients(o.per100),
     servings: servings(o.servings),
-    source: 'custom' as const,
+    source,
+    sourceId,
+    favorite: o.favorite === true ? true : undefined,
     createdAt: reqNum(o, 'createdAt', 0, 1e15),
   });
 }

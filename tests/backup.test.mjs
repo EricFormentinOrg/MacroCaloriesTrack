@@ -45,3 +45,25 @@ test('CSV: separatore, virgola decimale, escaping e formule neutralizzate', () =
   assert.ok(lines[2].startsWith(`2026-11-11;Colazione;"'=HYPERLINK(""x"")"`));
   assert.ok(lines[3].includes('"Pane; integrale"'));
 });
+
+test('provenienza e preferiti: validati e conservati', () => {
+  const ch = { ...food, id: 'f2', name: 'Bresaola', brand: undefined, source: 'ch', sourceId: '705', favorite: true };
+  delete ch.brand;
+  const off = { ...food, id: 'f3', source: 'off', sourceId: '8000000000017', barcode: '8000000000017' };
+  const r = parseBackup(JSON.stringify(buildBackup({ ...data, foods: [food, ch, off] })));
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.data.foods, [food, ch, off]);
+  // Backup della Fase 1, senza "source": resta un alimento personale.
+  const legacy = { ...food };
+  delete legacy.source;
+  const r2 = parseBackup(JSON.stringify(buildBackup({ ...data, foods: [legacy] })));
+  assert.equal(r2.ok, true);
+  assert.equal(r2.data.foods[0].source, 'custom');
+  for (const bad of [
+    { ...food, source: 'web' },
+    { ...food, source: 'ch' },
+    { ...food, source: 'ch', sourceId: '../x' },
+    { ...food, sourceId: '705' },
+    { ...food, favorite: 'sì' },
+  ]) assert.equal(parseBackup(JSON.stringify(buildBackup({ ...data, foods: [bad] }))).ok, false, JSON.stringify(bad));
+});

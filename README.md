@@ -1,8 +1,8 @@
 # MacroCaloriesTrack
 
-Diario alimentare personale: calorie e macronutrienti per pasto, obiettivo calcolato da profilo e peso, storico, backup. Funziona offline come app installata sulla schermata Home dell'iPhone. I dati restano sul dispositivo.
+Diario alimentare personale: calorie e macronutrienti per pasto, obiettivo calcolato da profilo e peso, storico, backup. Funziona offline come app installata sulla schermata Home dell'iPhone. I dati restano sul dispositivo; solo le ricerche su Open Food Facts escono, e solo quando le chiedi.
 
-Stato: Fase 1 completata. La sincronizzazione Dropbox, il database alimenti e l'OCR delle etichette sono le prossime fasi. Il dettaglio è in [docs/PIANO.md](docs/PIANO.md).
+Stato: Fasi 1 e 2 completate (diario, alimenti generici della banca dati svizzera, prodotti di Open Food Facts, preferiti). Le prossime fasi sono la sincronizzazione Dropbox e l'OCR delle etichette. Il dettaglio è in [docs/PIANO.md](docs/PIANO.md).
 
 ## Requisiti
 
@@ -57,7 +57,8 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 
 ## Sicurezza
 
-- La CSP permette solo risorse dello stesso sito: nessuno script, font o servizio esterno.
+- La CSP permette solo risorse dello stesso sito: nessuno script o font esterno. L’unica eccezione sono le chiamate API a `https://world.openfoodfacts.org` (`connect-src`).
+- Le risposte di Open Food Facts vengono validate campo per campo, come i backup.
 - Nessun `innerHTML` nel codice: testi e file importati non possono iniettare markup.
 - Il backup importato viene validato campo per campo; i campi sconosciuti vengono scartati.
 - Il CSV esportato neutralizza le formule (celle che iniziano con `=`, `+`, `-`, `@`).
@@ -74,6 +75,18 @@ Da fare quando si arriva alla sincronizzazione. Le etichette della console Dropb
    - abilita i client pubblici (PKCE).
 4. Annota l'**App key**. È pubblica per natura con PKCE e va nel codice. L'**App secret** non serve e non va mai inserito nell'app.
 
+## Aggiornare la banca dati degli alimenti
+
+1. Scarica il file Excel da https://naehrwertdaten.ch/it/downloads/ (versione italiana).
+2. `node scripts/import-ch.mjs <percorso del file .xlsx>` riscrive `public/data/alimenti-ch.json` e si ferma su qualunque dato inatteso.
+3. `npm run build && npm test`, poi controlla il diff: una riga per alimento.
+
+Gli alimenti già usati restano com'erano: sono copie personali.
+
 ## Licenze
 
 Il font Lora (`public/fonts/Lora-Variable.ttf`) è distribuito senza modifiche ed è soggetto alla SIL Open Font License 1.1 (https://scripts.sil.org/OFL, l’indirizzo riportato nei metadati del font). Copyright 2011 The Lora Project Authors. La licenza è riportata anche nei metadati del file.
+
+Alimenti generici: Banca dati svizzera dei valori nutritivi, Ufficio federale della sicurezza alimentare e di veterinaria (USAV), https://naehrwertdaten.ch. L'uso, anche in applicazioni di diario alimentare, è consentito con l'indicazione della fonte; il file `public/data/alimenti-ch.json` ne è una conversione in JSON.
+
+Prodotti confezionati: Open Food Facts, https://world.openfoodfacts.org, banca dati sotto Open Database License (ODbL). L'app interroga il servizio e conserva in locale solo i prodotti cercati.

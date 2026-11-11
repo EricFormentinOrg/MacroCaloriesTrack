@@ -2,7 +2,7 @@ import type { BackupData } from './backup.js';
 import * as db from './db.js';
 import { mergeById, pickNewer } from './merge.js';
 import { clean } from './model.js';
-import type { Entry, EntryServing, Food, Meal, Nutrients, Profile, Serving, Unit, Weight } from './model.js';
+import type { Entry, EntryServing, Food, FoodSource, Meal, Nutrients, Profile, Serving, Unit, Weight } from './model.js';
 
 const now = (): number => Date.now();
 const newId = (): string => crypto.randomUUID();
@@ -36,16 +36,24 @@ export interface FoodInput {
   unit: Unit;
   per100: Nutrients;
   servings: Serving[];
+  source?: FoodSource;
+  sourceId?: string;
+  favorite?: boolean;
 }
 
 export async function saveFood(input: FoodInput): Promise<Food> {
   const existing = input.id ? await db.get('foods', input.id) : undefined;
   const t = now();
+  // La provenienza resta quella della prima copia, anche dopo una modifica dei valori.
+  const source = existing?.source ?? input.source ?? 'custom';
+  const favorite = input.favorite ?? existing?.favorite;
   const food: Food = clean({
     id: existing?.id ?? newId(),
     createdAt: existing?.createdAt ?? t,
     updatedAt: t,
-    source: 'custom' as const,
+    source,
+    sourceId: source === 'custom' ? undefined : existing?.sourceId ?? input.sourceId,
+    favorite: favorite ? true : undefined,
     name: input.name,
     brand: input.brand,
     barcode: input.barcode,
@@ -55,6 +63,32 @@ export async function saveFood(input: FoodInput): Promise<Food> {
   });
   await db.put('foods', food);
   return food;
+}
+
+/** Copia personale ancora attiva di un alimento della banca dati o di Open Food Facts. */
+export async function findBySource(source: Exclude<FoodSource, 'custom'>, sourceId: string): Promise<Food | undefined> {
+  return (await db.getAll('foods')).find((f) => !f.deleted && f.source === source && f.sourceId === sourceId);
+}
+
+/**
+ * Primo uso di un alimento esterno: lo copia tra gli alimenti personali, così lo storico
+ * e le modifiche restano stabili. Se la copia esiste già, restituisce quella.
+ */
+export async function adoptFood(input: FoodInput & { source: Exclude<FoodSource, 'custom'>; sourceId: string }): Promise<Food> {
+  const existing = await findBySource(input.source, input.sourceId);
+  if (existing) {
+    if (input.favorite && !existing.favorite) return setFavorite(existing.id, true).then((f) => f ?? existing);
+    return existing;
+  }
+  return saveFood({ ...input, id: undefined });
+}
+
+export async function setFavorite(id: string, favorite: boolean): Promise<Food | undefined> {
+  const f = await db.get('foods', id);
+  if (!alive(f)) return undefined;
+  const next = clean({ ...f, favorite: favorite ? true : undefined, updatedAt: now() });
+  await db.put('foods', next);
+  return next;
 }
 
 export async function deleteFood(id: string): Promise<void> {

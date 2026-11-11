@@ -65,6 +65,15 @@ export interface Serving {
   qty: number;
 }
 
+/**
+ * Provenienza di un alimento personale. Gli alimenti della banca dati svizzera ('ch')
+ * e di Open Food Facts ('off') diventano personali al primo uso: una copia stabile,
+ * modificabile, che non cambia se la fonte si aggiorna.
+ */
+export type FoodSource = 'custom' | 'ch' | 'off';
+
+export const FOOD_SOURCES: ReadonlyArray<FoodSource> = ['custom', 'ch', 'off'];
+
 export interface Food extends SyncRecord {
   name: string;
   brand?: string;
@@ -72,7 +81,10 @@ export interface Food extends SyncRecord {
   unit: Unit;
   per100: Nutrients;
   servings: Serving[];
-  source: 'custom';
+  source: FoodSource;
+  /** ID nella banca dati svizzera o codice a barre di Open Food Facts. */
+  sourceId?: string;
+  favorite?: boolean;
   createdAt: number;
 }
 

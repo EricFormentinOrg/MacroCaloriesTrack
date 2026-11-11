@@ -17,6 +17,8 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 | Fonte dei dati | IndexedDB sul dispositivo; Dropbox come replica cifrata | L'app funziona offline; Dropbox non vede mai dati in chiaro. |
 | Storico | Ogni voce di diario copia i valori dell'alimento | Modificare o eliminare un alimento non altera i giorni passati. |
 | Obiettivo dei giorni passati | Calcolato col peso valido in quel giorno | Lo storico non cambia quando il peso scende. |
+| Alimenti generici | Banca dati svizzera dei valori nutritivi (USAV), versione italiana | Uso esplicitamente consentito anche in app di diario alimentare, con indicazione della fonte; nomi già in italiano; tutti gli 8 valori dell'etichetta UE. CREA scartato per licenza non chiara. |
+| Alimenti esterni | Copiati tra gli alimenti personali al primo uso (`source`, `sourceId`) | Lo storico e le modifiche non dipendono dalla fonte; nessun doppione. |
 
 ## Architettura
 
@@ -68,12 +70,21 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - [x] Aggiunta rapida: ricerca senza accenti, alimenti recenti, ultima quantità proposta, creazione di un alimento dalla ricerca.
 - [x] Modifica ed eliminazione delle voci, con "Annulla".
 
-### Fase 2: database alimenti (prossima)
-- [ ] Verificare la licenza di ridistribuzione delle tabelle CREA (composizione degli alimenti). Se non è compatibile, usare USDA FoodData Central (pubblico dominio) con nomi tradotti in italiano.
-- [ ] Includere il dataset generico nel repo come JSON statico in cache, con ricerca locale.
-- [ ] Ricerca su Open Food Facts (prodotti confezionati), con cache locale. Va aggiunto `https://world.openfoodfacts.org` a `connect-src`.
-- [ ] Preferiti.
-- [ ] Gli alimenti presi da una fonte vengono copiati come alimenti personali al primo uso, così lo storico resta stabile.
+### Fase 2: database alimenti (completata)
+- [x] Verificare la licenza di ridistribuzione delle tabelle CREA (composizione degli alimenti). Esito dell'11 novembre 2026: nessuna licenza formale; il sito vieta la riproduzione "senza una chiara indicazione della fonte originale" e non offre download (832 schede da estrarre una per una). Non chiaramente compatibile. Alternative valutate: Banca dati svizzera dei valori nutritivi, Ciqual, USDA FoodData Central, BDA. Scelta: banca dati svizzera.
+- [x] Dataset generico come JSON statico in precache, con ricerca locale:
+  - `public/data/alimenti-ch.json`: 1.216 alimenti, versione 7.1 del 1° luglio 2026, 126 KB (32 KB gzip);
+  - generato da `scripts/import-ch.mjs` dal file Excel ufficiale; "tr." e "<x" valgono 0, "nd" resta vuoto;
+  - validato all'avvio (`src/catalog.ts`), ricerca senza accenti su nome, sinonimi e categoria.
+- [x] Open Food Facts (`src/off.ts`, `src/sources.ts`):
+  - ricerca testuale con `/cgi/search.pl` su richiesta esplicita (pulsante), ricerca per codice a barre con `/api/v2/product`;
+  - risposte validate campo per campo, testo ripulito da caratteri di controllo e invisibili;
+  - limiti lato client sotto quelli documentati (12 letture e 8 ricerche al minuto), timeout di 12 secondi;
+  - cache in IndexedDB (store `cache`, database versione 2): ricerche 7 giorni, prodotti 30, al massimo 300 voci; senza rete usa la copia scaduta; non entra nel backup; "Cancella tutti i dati" la svuota;
+  - prodotti incompleti o incoerenti aprono l'editor con un avviso prima del primo uso;
+  - solo `https://world.openfoodfacts.org` aggiunto a `connect-src`.
+- [x] Preferiti (`favorite` sull'alimento, sincronizzato come gli altri campi): stella negli elenchi, sezione "Preferiti" in Aggiungi e in Alimenti.
+- [x] Copia come alimento personale al primo uso (aggiunta al diario o preferito), con provenienza mostrata nell'editor. Le modifiche successive non toccano la fonte.
 
 ### Fase 3: sincronizzazione Dropbox
 - [ ] OAuth PKCE con `state` contro CSRF, token in IndexedDB, rinnovo automatico.
@@ -104,6 +115,8 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - **OCR**: su confezioni curve, lucide o con testo piccolo le correzioni saranno frequenti. La Fase 0 dirà quanto.
 - **Passphrase**: se la perdi, i dati su Dropbox sono irrecuperabili. L'export JSON in chiaro è l'unico paracadute.
 - **Open Food Facts**: le ricerche rivelano al loro server cosa cerchi. I valori sono inseriti da volontari e vanno controllati.
+- **Ricerca testuale su Open Food Facts**: l'11 novembre 2026 `/cgi/search.pl` rispondeva quasi sempre 503 ("sovraccarico o non disponibile agli utenti anonimi"), senza header CORS. La ricerca per codice a barre funzionava. Search-a-licious (`search.openfoodfacts.org`) risponde, ma senza `Access-Control-Allow-Origin` per origini esterne: dal browser non è usabile.
+- **Banca dati svizzera**: nomi in italiano svizzero ("pane bigio", "Olio d'oliva" senza "extravergine"), qualche refuso della fonte lasciato com'è. I valori sono per 100 g anche per le bevande. 24 alimenti, quasi tutti alcolici, fanno scattare l'avviso kcal/macro dell'editor perché l'energia dell'alcol non è nei macronutrienti.
 - **iPhone**: l'app va installata sulla schermata Home e va concessa l'archiviazione persistente, altrimenti Safari può cancellare i dati dopo giorni di inattività.
 - **Repository pubblico**: con il piano GitHub gratuito, Pages richiede un repository pubblico. Il codice è visibile, i dati no.
 
@@ -114,8 +127,8 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
   - l'export dal foglio di condivisione;
   - il selettore della data toccando il titolo;
   - l'installazione della PWA e l'archiviazione persistente.
-- **Licenza CREA**: non verificata.
+- **Licenza CREA**: verificata l'11 novembre 2026, non chiaramente compatibile (vedi Fase 2). Una conferma scritta del CREA la renderebbe utilizzabile.
 - **Peso dei modelli Tesseract** per lingua: da misurare.
-- **Limiti di frequenza di Open Food Facts**: da verificare nella loro documentazione.
+- **Open Food Facts**: limiti verificati nella documentazione l'11 novembre 2026: 15 richieste al minuto per IP sulle schede prodotto, 10 sulle ricerche; oltre i limiti globali risponde 503. Ricerca testuale solo con `/cgi/search.pl`. Richiede un User-Agent `NomeApp/Versione (email)`. Verificato in Chromium: `fetch` ignora un `User-Agent` personalizzato; l'app invia `X-User-Agent: MacroCaloriesTrack/<versione> (+<indirizzo dell'app>)`, accettato dal preflight CORS. Che OFF lo consideri equivalente non è documentato. Al posto dell'email c'è l'indirizzo dell'app, per non pubblicare un contatto personale. Comportamento su Safari iOS: da verificare.
 - **GitHub Actions**: aggiornate l'11 novembre 2026 a `checkout` v7.0.1, `setup-node` v7.1.0, `upload-pages-artifact` v5.0.0, `deploy-pages` v5.0.1, `upload-artifact` v7.0.2, fissate agli SHA. Il workflow non è ancora mai girato: va verificato al primo push.
 - **Formato dei numeri**: in Chromium `it-IT` non mette il separatore delle migliaia sotto 10.000 ("1270"); Safari potrebbe mostrare "1.270". Non cambia i calcoli.
