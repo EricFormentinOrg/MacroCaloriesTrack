@@ -1,0 +1,5 @@
+# Testo sempre con LF, anche su Windows (core.autocrlf=true): la build calcola
+# la versione dall'hash dei file e la CI gira su Linux.
+* text=auto eol=lf
+*.png binary
+*.ttf binary

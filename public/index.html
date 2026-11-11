@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Solo risorse dello stesso sito. Quando arrivano Dropbox (Fase 3) e Open Food Facts (Fase 2)
+       i loro domini vanno aggiunti a connect-src, e a nient'altro. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#EDF0EC" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121A20" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Macro">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Macro</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <main id="main"></main>
+
+  <nav class="tabs" aria-label="Sezioni">
+    <a href="#/" data-tab="diario">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h10.5A2.5 2.5 0 0 1 19 6v14.5H8.5A2.5 2.5 0 0 1 6 18z"/><path d="M6 18a2.5 2.5 0 0 1 2.5-2.5H19"/><path d="M10 8h5"/></svg>
+      <span>Diario</span>
+    </a>
+    <a href="#/alimenti" data-tab="alimenti">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5h8"/><path d="M9 3.5v3L6.5 9.5v9a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-9L15 6.5v-3"/><path d="M6.5 12.5h11"/></svg>
+      <span>Alimenti</span>
+    </a>
+    <a href="#/profilo" data-tab="profilo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.8"/><path d="M4.5 20.5c1.3-3.8 4.2-5.8 7.5-5.8s6.2 2 7.5 5.8"/></svg>
+      <span>Profilo</span>
+    </a>
+    <a href="#/impostazioni" data-tab="impostazioni">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+      <span>Impostazioni</span>
+    </a>
+  </nav>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <noscript><p>MacroCaloriesTrack richiede JavaScript.</p></noscript>
+</body>
+</html>
