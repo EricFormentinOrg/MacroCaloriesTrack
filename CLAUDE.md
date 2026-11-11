@@ -12,7 +12,7 @@ MacroCaloriesTrack è un diario alimentare personale di Eric, ispirato a FatSecr
 - `npm run build`: pulisce `dist/`, compila `src/` in `dist/js/`, copia `public/` e scrive versione e precache nel service worker (`scripts/build.mjs`).
 - `npm test`: test unitari con `node --test` sui moduli compilati in `dist/js/`. Richiede prima la build.
 - `npm run serve`: server statico su http://localhost:8080.
-- `npm run e2e`: flusso completo in Chromium. Richiede `npm i -D playwright` e `npx playwright install chromium`.
+- `npm run e2e`: flusso completo in Chromium. Playwright è già in `devDependencies` (versione esatta); il browser si scarica una volta con `npx playwright install chromium`. Gira anche in CI.
 
 Dopo ogni modifica: `npm run build && npm test`. Dopo modifiche alla UI esegui anche `npm run e2e`.
 

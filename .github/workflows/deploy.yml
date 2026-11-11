@@ -5,36 +5,56 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Nessun permesso di default: ogni job dichiara solo quelli che gli servono.
+permissions: {}
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
+# Action fissate allo SHA del commit del tag indicato nel commento
+# (verificato con git ls-remote). Per aggiornarle: nuovo tag, nuovo SHA.
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
-      - run: npm install --no-audit --no-fund
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm ci --no-audit --no-fund
       - run: npm run build
       - run: npm test
-      - uses: actions/upload-pages-artifact@v3
+      # Solo Chromium headless shell: niente Chromium completo, Firefox o WebKit.
+      - run: npx playwright install --with-deps --only-shell chromium
+      - run: npm run e2e
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-screens
+          path: tests/e2e/screens/
+          retention-days: 7
+          if-no-files-found: ignore
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

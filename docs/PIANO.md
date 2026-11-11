@@ -20,7 +20,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 
 ## Architettura
 
-- **Hosting**: GitHub Pages, deploy da GitHub Actions (build, test, pubblicazione di `dist/`). Routing su hash (`#/diario/2026-11-11`), nessuna riscrittura lato server.
+- **Hosting**: GitHub Pages, deploy da GitHub Actions (build, test unitari, e2e in Chromium headless shell, pubblicazione di `dist/`). Action fissate agli SHA dei commit, permessi dichiarati per job. Routing su hash (`#/diario/2026-11-11`), nessuna riscrittura lato server.
 - **App**: PWA installabile su iPhone dalla schermata Home, service worker con tutti i file in cache, funzionamento completo offline.
 - **Sicurezza nel browser**:
   - CSP rigida via meta tag (GitHub Pages non permette header personalizzati): solo risorse dello stesso sito. Ogni dominio esterno futuro va aggiunto solo a `connect-src`.
@@ -117,5 +117,5 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - **Licenza CREA**: non verificata.
 - **Peso dei modelli Tesseract** per lingua: da misurare.
 - **Limiti di frequenza di Open Food Facts**: da verificare nella loro documentazione.
-- **GitHub Actions**: il workflow usa `checkout@v4`, `setup-node@v4`, `upload-pages-artifact@v3`, `deploy-pages@v4`. Potrebbero esistere versioni più recenti; per irrobustire, si possono fissare gli SHA dei commit.
+- **GitHub Actions**: aggiornate l'11 novembre 2026 a `checkout` v7.0.1, `setup-node` v7.1.0, `upload-pages-artifact` v5.0.0, `deploy-pages` v5.0.1, `upload-artifact` v7.0.2, fissate agli SHA. Il workflow non è ancora mai girato: va verificato al primo push.
 - **Formato dei numeri**: in Chromium `it-IT` non mette il separatore delle migliaia sotto 10.000 ("1270"); Safari potrebbe mostrare "1.270". Non cambia i calcoli.

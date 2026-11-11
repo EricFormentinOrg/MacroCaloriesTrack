@@ -21,22 +21,23 @@ Poi apri http://localhost:8080. Su localhost il service worker e la crittografia
 
 Durante lo sviluppo, `npm run watch` ricompila il TypeScript a ogni modifica. Dopo un cambio in `public/`, rilancia `npm run build`.
 
-### Test end-to-end (facoltativo)
+### Test end-to-end
+
+Playwright è tra le dipendenze di sviluppo con versione esatta. Il browser va scaricato una volta:
 
 ```
-npm i -D playwright
 npx playwright install chromium
 npm run build && npm run e2e
 ```
 
-Il test percorre l'intero flusso in Chromium con viewport da iPhone e fallisce su qualunque errore JavaScript o violazione della CSP. Le schermate finiscono in `tests/e2e/screens/`.
+Il test percorre l'intero flusso in Chromium con viewport da iPhone e fallisce su qualunque errore JavaScript o violazione della CSP. Le schermate finiscono in `tests/e2e/screens/`. Lo stesso test gira anche in GitHub Actions prima di ogni pubblicazione.
 
 ## Pubblicazione su GitHub Pages
 
 1. Crea un repository su GitHub e carica il contenuto di questa cartella sul branch `main`. Con il piano GitHub gratuito, Pages richiede un repository pubblico: il codice è visibile, i tuoi dati no, perché non stanno mai nel repository.
-2. Al primo `npm install` viene creato `package-lock.json`: aggiungilo al commit.
+2. `package-lock.json` è nel repository: la CI installa con `npm ci`, quindi esattamente le versioni del lockfile.
 3. Su GitHub apri **Settings → Pages** e in **Build and deployment** scegli **GitHub Actions** come sorgente.
-4. A ogni push su `main` il workflow `.github/workflows/deploy.yml` compila, esegue i test e pubblica. L'indirizzo è `https://<utente>.github.io/<repository>/`.
+4. A ogni push su `main` il workflow `.github/workflows/deploy.yml` compila, esegue test unitari ed end-to-end e pubblica solo se passano. L'indirizzo è `https://<utente>.github.io/<repository>/`. Le action del workflow sono fissate allo SHA del commit: per aggiornarle va cambiato lo SHA, non solo il numero di versione.
 
 ## Installazione su iPhone
 
