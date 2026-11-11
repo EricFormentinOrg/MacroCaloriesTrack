@@ -16,7 +16,8 @@ concurrency:
 # (verificato con git ls-remote). Per aggiornarle: nuovo tag, nuovo SHA.
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Versione esplicita: ubuntu-latest sta passando a Ubuntu 26 e l'e2e è verificato su 24.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -32,8 +33,13 @@ jobs:
       - run: npm run build
       - run: npm test
       # Solo Chromium headless shell: niente Chromium completo, Firefox o WebKit.
-      - run: npx playwright install --with-deps --only-shell chromium
+      # Senza --with-deps: l'immagine ha già Google Chrome, quindi le librerie di sistema;
+      # apt-get aggiungerebbe solo font opzionali e dipenderebbe dai mirror Ubuntu, che
+      # l'11/11/2026 non si risolvevano e hanno bloccato la CI per 10 minuti.
+      - run: npx playwright install --only-shell chromium
+        timeout-minutes: 5
       - run: npm run e2e
+        timeout-minutes: 5
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -47,7 +53,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       pages: write
