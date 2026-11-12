@@ -59,7 +59,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 ### Fase 0: prove tecniche (parziale)
 - [x] Ciclo cifra, decifra e verifica passphrase (test in Node).
 - [x] Login Dropbox da PWA installata su iPhone, con il codice da copiare (nessun ritorno da redirect, che su iOS rischiava di aprirsi in Safari invece che nella PWA). "Prova la connessione" riuscita il 12 novembre 2026, riferito da Eric.
-- [ ] Tesseract.js su circa 10 etichette reali, per misurare la qualità di lettura prima di investire nel parser.
+- [x] Tesseract.js su etichette di prova (12 novembre 2026, cartella locale `TestFoto/`, esclusa da git): 7 immagini, 6 miniature web a 474 px e una foto di lattina con tabella ruotata in greco e inglese. Con tesseract.js 7.0.0 (core 7.0.0, modelli `best_int` ita+eng) e il parser dell'app: immagini originali 3/43 valori esatti; con pre-elaborazione in canvas (lato lungo 2000 px, grigi, contrasto) e segmentazione a blocco unico (PSM 6) 12/43 esatti e 6 sbagliati, alcuni senza segnalazione (virgole perse: 0,8 → 8, 3,2 → 32); lattina 0/7 in ogni variante. Qualità insufficiente per ora: resta il testo copiato con Testo live. Da provare: Testo live sulle stesse immagini e su foto vere ad alta risoluzione.
 
 ### Fase 1: diario (completata)
 - [x] Profilo e calcolo degli obiettivi (Mifflin-St Jeor, fattori di attività da 1,2 a 1,9, circa 7700 kcal per kg), con obiettivi manuali.
@@ -87,7 +87,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - [x] Preferiti (`favorite` sull'alimento, sincronizzato come gli altri campi): stella negli elenchi, sezione "Preferiti" in Aggiungi e in Alimenti.
 - [x] Copia come alimento personale al primo uso (aggiunta al diario o preferito), con provenienza mostrata nell'editor. Le modifiche successive non toccano la fonte.
 
-### Fase 3: sincronizzazione Dropbox (implementata, da provare con due dispositivi reali)
+### Fase 3: sincronizzazione Dropbox (completata)
 - [x] App key inserita dall'utente in Impostazioni e salvata in IndexedDB (non è un segreto). Accesso OAuth PKCE con codice da copiare: nessun redirect URI da configurare e nessun problema di ritorno nella PWA su iOS. Token in IndexedDB, rinnovo automatico, disconnessione con revoca. Il challenge resta lo stesso se l'app si ricarica durante il login. "Prova la connessione" scrive, rilegge e cancella un file. Moduli: `src/dropbox.ts` (puro, testato), `src/dropboxClient.ts`, `src/views/dropboxSettings.ts`. Login provato su iPhone il 12 novembre 2026.
 - [x] Prima configurazione: passphrase (almeno 12 caratteri, ripetuta) e `meta.json` con salt e valore di controllo, creato in modo esclusivo (se un altro dispositivo lo crea nello stesso momento, si passa alla verifica). Sugli altri dispositivi la passphrase è verificata col valore di controllo prima di toccare i dati. La chiave è una `CryptoKey` non estraibile in IndexedDB; se il browser non la sa salvare resta in memoria e alla riapertura serve di nuovo la passphrase.
 - [x] Motore puro `src/sync.ts`, testato in Node con due dispositivi e un Dropbox in memoria:
@@ -98,13 +98,14 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - [x] e2e con due dispositivi su un Dropbox simulato condiviso: passphrase diverse rifiutate, dati cifrati (nessun nome in chiaro sui file), invio automatico, ricezione, scollegamento che revoca il token e dimentica la chiave.
 - [x] Domini aggiunti a `connect-src`: `https://api.dropboxapi.com`, `https://content.dropboxapi.com` (CORS verificato: entrambi accettano l'origine dell'app ed espongono `Dropbox-API-Result`).
 
-### Fase 4: etichetta via OCR
+### Fase 4: etichetta via OCR (parziale)
+- [x] Senza librerie: "Leggi dall'etichetta" nell'editor accetta il testo copiato con Testo live di iOS (o Google Lens) e compila i campi.
 - [ ] Foto o file, ritaglio manuale, pre-elaborazione (scala di grigi, contrasto, ingrandimento).
-- [ ] Tesseract.js self-hosted: worker, core WASM e modelli di lingua serviti da `public/`, caricati solo al primo uso. Lingue iniziali: italiano, inglese, tedesco, francese.
-- [ ] Parser con dizionario multilingua delle voci (energia, grassi, saturi, carboidrati, zuccheri, fibre, proteine, sale), ordine UE come aiuto. Riconoscimento delle colonne "per 100 g" e "per porzione".
-- [ ] Controlli di plausibilità come nell'editor attuale.
-- [ ] Risultato precompilato nell'editor alimento esistente, con la foto accanto e i campi dubbi evidenziati. Correzione sempre possibile.
-- [ ] La CSP potrebbe richiedere `'wasm-unsafe-eval'` in `script-src` per il WASM di Tesseract. Va verificato e motivato.
+- [ ] Tesseract.js self-hosted: worker, core WASM e modelli di lingua serviti da `public/`, caricati solo al primo uso. Lingue iniziali: italiano, inglese, tedesco, francese. In attesa dell'approvazione di Eric. Dati verificati il 12 novembre 2026: tesseract.js 7.0.0 e tesseract.js-core 6.1.2 (Apache-2.0); core SIMD-LSTM 2,87 MB di WASM; modelli LSTM `4.0.0_best_int` compressi: ita 1,66 MB, eng 2,95 MB, deu 1,33 MB, fra 0,71 MB (pacchetti `@tesseract.js-data/*` 1.0.0, MIT).
+- [x] Parser `src/label.ts` (puro, testato): voci in italiano, inglese, tedesco e francese; primo valore della riga (colonna per 100 g/ml); unità ml riconosciuta; kJ convertiti; mg in g; "< x" inserito 0 o come la voce "di cui"; correzioni O→0 e l→1 tipiche dell'OCR; testo copiato per colonne abbinato per posizione. Ogni valore incerto è segnalato.
+- [x] Controlli di plausibilità dell'editor applicati ai valori letti.
+- [x] Risultato precompilato nell'editor alimento, con i campi dubbi evidenziati e spiegati; correggere un campo toglie l'evidenza. Manca la foto accanto (arriva con l'OCR).
+- [ ] CSP: verificato in Chromium il 12 novembre 2026 che un worker caricato da un file dello stesso sito compila WebAssembly anche con la CSP attuale (la CSP in meta non si applica al worker; GitHub Pages non invia header CSP), mentre nel thread principale è bloccato e i worker `blob:` sono vietati da `worker-src 'self'`. Con `workerBlobURL: false` non servirebbe `'wasm-unsafe-eval'`. Da verificare su Safari iOS.
 
 ### Fase 5: storico e portabilità (parziale)
 - [x] Export JSON completo, con i tombstone.
@@ -141,8 +142,8 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
   - il selettore della data toccando il titolo;
   - l'installazione della PWA e l'archiviazione persistente.
 - **Licenza CREA**: verificata l'11 novembre 2026, non chiaramente compatibile (vedi Fase 2). Una conferma scritta del CREA la renderebbe utilizzabile.
-- **Sincronizzazione reale**: due dispositivi con lo stesso Dropbox vero. Su Safari iOS: salvataggio della `CryptoKey` in IndexedDB (se non riesce, l'app lo dice e chiede la passphrase a ogni apertura) e durata della derivazione PBKDF2 a 600.000 iterazioni.
-- **Peso dei modelli Tesseract** per lingua: da misurare.
+- **Sincronizzazione reale**: verificata il 12 novembre 2026 da Eric su due dispositivi con lo stesso Dropbox: sincronizzazione rapida, `CryptoKey` conservata da Safari iOS alla riapertura della PWA, nessun errore.
+- **Peso dei modelli Tesseract** per lingua: misurato, vedi Fase 4. Qualità di lettura su etichette reali: da misurare.
 - **Open Food Facts**: limiti verificati nella documentazione l'11 novembre 2026: 15 richieste al minuto per IP sulle schede prodotto, 10 sulle ricerche; oltre i limiti globali risponde 503. Ricerca testuale solo con `/cgi/search.pl`. Richiede un User-Agent `NomeApp/Versione (email)`. Verificato in Chromium: `fetch` ignora un `User-Agent` personalizzato; l'app invia `X-User-Agent: MacroCaloriesTrack/<versione> (+<indirizzo dell'app>)`, accettato dal preflight CORS. Che OFF lo consideri equivalente non è documentato. Al posto dell'email c'è l'indirizzo dell'app, per non pubblicare un contatto personale. Comportamento su Safari iOS: da verificare.
 - **GitHub Actions**: aggiornate l'11 novembre 2026 a `checkout` v7.0.1, `setup-node` v7.1.0, `upload-pages-artifact` v5.0.0, `deploy-pages` v5.0.1, `upload-artifact` v7.0.2, fissate agli SHA. Primo run (11 novembre 2026): build e test unitari ok; `playwright install --with-deps` fallito dopo 10 minuti perché i mirror apt di Ubuntu non si risolvevano. Corretto: runner `ubuntu-24.04` esplicito, installazione senza `--with-deps` (le librerie ci sono già con Chrome preinstallato), timeout di 5 minuti sugli step di Playwright. Verificato col run di `7a718c2`: verde in 51 secondi, e2e compreso; il sito pubblicato serve solo `dist/`.
 - **Formato dei numeri**: in Chromium `it-IT` non mette il separatore delle migliaia sotto 10.000 ("1270"); Safari potrebbe mostrare "1.270". Non cambia i calcoli.

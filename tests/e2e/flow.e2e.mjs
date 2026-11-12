@@ -343,6 +343,24 @@ try {
   await p2.waitForSelector('.diary');
   assert.equal(await p2.locator('.meal:has(h2:text("Spuntino")) .row').count(), 3);
   assert.match(await p2.textContent('.meal:has(h2:text("Spuntino")) .meal-kcal'), /^502\s*kcal$/);
+
+  // Fase 4: valori dal testo dell'etichetta (Testo live), con campi dubbi evidenziati.
+  await p2.goto(BASE + '#/alimento/nuovo');
+  await p2.waitForSelector('.food-edit');
+  await p2.click('button:has-text("Leggi dall’etichetta")');
+  await p2.waitForSelector('dialog.sheet[open] textarea');
+  await p2.fill('dialog textarea', 'Valori medi per 100 ml\nEnergia 195 kJ / 46 kcal\nGrassi <0,5 g\ndi cui saturi 0,3 g\nCarboidrati 4,9 g\ndi cui zuccheri 4,9 g\nProteine 3,3 g\nSale 0,13 g');
+  await p2.click('dialog button:has-text("Compila")');
+  await p2.waitForSelector('dialog.sheet', { state: 'detached' });
+  const lab = await p2.$$eval('.nrow input', (els) => els.map((e) => e.value));
+  assert.deepEqual(lab, ['46', '', '0,3', '0,3', '4,9', '4,9', '', '3,3', '0,13'], 'kcal, kJ, grassi, saturi, carboidrati, zuccheri, fibre, proteine, sale');
+  assert.equal((await p2.textContent('.food-edit .checks')).trim(), '', 'nessun falso avviso di coerenza');
+  assert.equal(await p2.isChecked('.seg-opt input[value="ml"]'), true, 'unità ml riconosciuta');
+  assert.equal(await p2.locator('.nrow input.doubt').count(), 1, 'grassi "<0,5" da controllare');
+  assert.match(await p2.textContent('.food-edit .review'), /Grassi: indicato come “< 0,5”: inserito 0,3/);
+  await p2.screenshot({ path: `${SHOTS}/15-etichetta.png`, fullPage: true });
+  await p2.fill('.nrow input >> nth=2', '0,4');
+  assert.equal(await p2.locator('.nrow input.doubt').count(), 0, 'correggere il campo toglie l’evidenza');
   await ctx2.close();
 
   // ---- Fase 3: Dropbox dell'utente (App key personale) e sincronizzazione cifrata tra due dispositivi.

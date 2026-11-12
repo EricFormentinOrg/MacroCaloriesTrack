@@ -1,9 +1,10 @@
 import { parseDecimal, toInput } from '../format.js';
 import { NUTRIENTS } from '../model.js';
 import type { Food, Meal, NutrientKey, Nutrients, Serving, Unit } from '../model.js';
+import { parseLabel } from '../label.js';
 import { checkFood } from '../nutrition.js';
 import * as repo from '../repo.js';
-import { confirmSheet, decimalInput, field, h, nextId, segmented, toast } from '../ui.js';
+import { confirmSheet, decimalInput, field, h, nextId, openSheet, segmented, toast } from '../ui.js';
 
 /**
  * Bozza per un nuovo alimento: il nome digitato nella ricerca ("Crea un alimento")
@@ -58,6 +59,12 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
   const brand = h('input', { type: 'text', value: food?.brand ?? draft.brand ?? '', maxlength: 200, autocomplete: 'off', enterkeyhint: 'next' });
 
   const per100Title = h('h2', null, `Valori per 100 ${unit}`);
+  const unitControl = segmented('Si misura in', [{ value: 'g', label: 'Grammi' }, { value: 'ml', label: 'Millilitri' }], unit, (v) => {
+    unit = v;
+    per100Title.textContent = `Valori per 100 ${unit}`;
+    for (const t of unitTags) t.textContent = unit;
+    runChecks();
+  });
   const checks = h('div', { class: 'checks', 'aria-live': 'polite' });
   const errorBox = h('div', { class: 'errors', role: 'alert' });
 
@@ -73,7 +80,14 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
 
   const nutrientRows = NUTRIENTS.flatMap((n) => {
     const v = food ? food.per100[n.key] : draft.per100?.[n.key];
-    const inp = decimalInput({ id: nextId('n'), value: v !== undefined ? toInput(v) : '', onInput: runChecks });
+    const inp = decimalInput({
+      id: nextId('n'),
+      value: v !== undefined ? toInput(v) : '',
+      onInput: () => {
+        inp.classList.remove('doubt');
+        runChecks();
+      },
+    });
     inputs[n.key] = inp;
     const row = h('div', { class: `nrow${n.sub ? ' sub' : ''}` },
       h('label', { for: inp.id }, n.label, n.required ? null : h('span', { class: 'opt' }, ' facoltativo')),
@@ -102,6 +116,66 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
       per100[n.key] = v;
     }
     return { per100, errors };
+  }
+
+  // ---- Valori dal testo dell'etichetta (Testo live di iOS, Google Lens o OCR)
+  const labelNotes = h('div', { class: 'review', role: 'note', hidden: true });
+
+  function setUnit(v: Unit): void {
+    const radio = unitControl.querySelector<HTMLInputElement>(`input[type=radio][value="${v}"]`);
+    if (radio && !radio.checked) {
+      radio.checked = true;
+      radio.dispatchEvent(new Event('change'));
+    }
+  }
+
+  async function readLabel(): Promise<void> {
+    const text = await openSheet<string>('Valori dall’etichetta', (close) => {
+      const area = h('textarea', { class: 'label-text', rows: 9, autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Testo della tabella nutrizionale', maxlength: 20000 });
+      setTimeout(() => area.focus(), 50);
+      return h('form', {
+        class: 'qty-form',
+        novalidate: true,
+        onSubmit: (e: Event) => {
+          e.preventDefault();
+          close(area.value);
+        },
+      },
+        h('div', { class: 'sheet-head' }, h('h2', { class: 'sheet-title' }, 'Valori dall’etichetta')),
+        h('p', { class: 'muted' }, 'Su iPhone: inquadra la tabella nutrizionale con la Fotocamera o apri la foto, tieni premuto sul testo, “Seleziona tutto” e “Copia”. Poi incolla qui.'),
+        area,
+        h('div', { class: 'sheet-actions' },
+          h('button', { type: 'button', class: 'btn btn-quiet', onClick: () => close() }, 'Annulla'),
+          h('button', { type: 'submit', class: 'btn btn-primary' }, 'Compila'),
+        ),
+      );
+    });
+    if (!text?.trim()) return;
+    const r = parseLabel(text);
+    if (r.unit !== unit) setUnit(r.unit);
+    for (const n of NUTRIENTS) {
+      const v = r.values[n.key];
+      const inp = inputs[n.key];
+      inp.classList.remove('doubt');
+      inp.removeAttribute('title');
+      if (!v) continue;
+      inp.value = toInput(v.value);
+      if (v.doubt) {
+        inp.classList.add('doubt');
+        inp.title = v.doubt;
+      }
+    }
+    if (r.values.kcal) kj.value = '';
+    const doubts = NUTRIENTS.flatMap((n) => (r.values[n.key]?.doubt ? [`${n.label}: ${r.values[n.key]?.doubt}.`] : []));
+    labelNotes.replaceChildren(
+      h('p', null, Object.keys(r.values).length
+        ? 'Valori letti dall’etichetta: confrontali con la confezione prima di salvare. I campi evidenziati sono da controllare.'
+        : 'Non ho riconosciuto valori nel testo incollato.'),
+      ...[...doubts, ...r.notes].map((t) => h('p', { class: 'warn' }, t)),
+      // r.warnings non va ripetuto qui: lo mostra già il riquadro dei controlli sotto i valori.
+    );
+    labelNotes.hidden = false;
+    runChecks();
   }
 
   function runChecks(): void {
@@ -209,14 +283,11 @@ export async function foodEditView(id: string, ctx?: { date: string; meal: Meal 
     h('form', { class: 'form', novalidate: true, onSubmit: save },
       field('Nome', name),
       field('Marca', brand, 'Facoltativa'),
-      segmented('Si misura in', [{ value: 'g', label: 'Grammi' }, { value: 'ml', label: 'Millilitri' }], unit, (v) => {
-        unit = v;
-        per100Title.textContent = `Valori per 100 ${unit}`;
-        for (const t of unitTags) t.textContent = unit;
-        runChecks();
-      }),
+      unitControl,
       h('section', { class: 'form-section' },
         per100Title,
+        h('button', { type: 'button', class: 'btn btn-quiet btn-inline', onClick: () => void readLabel() }, 'Leggi dall’etichetta'),
+        labelNotes,
         h('div', { class: 'ngrid' }, ...nutrientRows),
         checks,
       ),

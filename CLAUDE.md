@@ -24,7 +24,8 @@ Dopo ogni modifica: `npm run build && npm test`. Dopo modifiche alla UI esegui a
   - `src/crypto.ts`, `src/merge.ts`, `src/backup.ts`;
   - `src/catalog.ts` (banca dati svizzera), `src/off.ts` (Open Food Facts: URL, validazione, limiti);
   - `src/dropbox.ts` (Dropbox: PKCE, URL, validazione delle risposte, classificazione degli errori);
-  - `src/sync.ts` (motore di sincronizzazione con adattatori: meta, cifratura dei file, merge, conflitti).
+  - `src/sync.ts` (motore di sincronizzazione con adattatori: meta, cifratura dei file, merge, conflitti);
+  - `src/label.ts` (lettura della tabella nutrizionale da testo: voci multilingua, valori per 100 g, dubbi).
 - `src/sources.ts`: caricamento della banca dati e chiamate a Open Food Facts con cache in IndexedDB.
 - `src/dropboxClient.ts`: login con codice, token in IndexedDB (`kv`: `dropbox`, `dropbox-pending`), rinnovo, RPC, upload condizionato, download.
 - `src/syncService.ts`: adattatori IndexedDB e Dropbox per `sync.ts`, chiave (`kv`: `sync-key`) e stato (`sync-state`), sincronizzazione automatica. Le scritture della sync usano `putBatch(..., silent)` per non rilanciarla.

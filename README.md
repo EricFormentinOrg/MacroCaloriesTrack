@@ -65,6 +65,10 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 - I file su Dropbox sono cifrati con AES-GCM 256, con chiave derivata dalla passphrase (PBKDF2-SHA256, 600.000 iterazioni). La passphrase non lascia mai il dispositivo; la chiave resta in IndexedDB come `CryptoKey` non estraibile. Il percorso del file è dato autenticato: un file spostato o scambiato non si decifra. Ogni file scaricato viene validato come un backup.
 - Dropbox: login OAuth con PKCE e codice da copiare, permesso limitato alla cartella dell'app, nessun segreto nell'app; `connect-src` include solo `api.dropboxapi.com` e `content.dropboxapi.com`.
 
+## Valori dall'etichetta
+
+Nell'editor di un alimento, **Leggi dall'etichetta** compila i valori dal testo della tabella nutrizionale. Su iPhone: inquadra la tabella con la Fotocamera (o apri una foto), tieni premuto sul testo, **Seleziona tutto**, **Copia**, poi incolla nell'app. I campi incerti restano evidenziati finché non li controlli.
+
 ## Collegare Dropbox
 
 Ogni persona usa il proprio Dropbox tramite una propria app Dropbox: i dati non passano da nessun server dell'app. Le etichette della console Dropbox potrebbero differire leggermente da queste.

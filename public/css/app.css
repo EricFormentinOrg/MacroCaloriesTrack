@@ -288,10 +288,12 @@ a { color: var(--accent); }
 .source-note { font-size: .8125rem; }
 .review { background: var(--warn-bg); color: var(--warn-ink); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; margin-bottom: 16px; }
 .review .warn { background: none; padding: 0; }
+.label-text { width: 100%; min-height: 180px; padding: 10px 12px; resize: vertical; line-height: 1.4; }
+input.doubt { border-color: var(--warn-ink); background: var(--warn-bg); color: var(--warn-ink); }
 
 /* ---- Controlli */
 
-input[type="text"], input[type="search"], input[type="date"], input[type="password"], select {
+input[type="text"], input[type="search"], input[type="date"], input[type="password"], textarea, select {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
