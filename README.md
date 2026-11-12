@@ -37,7 +37,7 @@ Il test percorre l'intero flusso in Chromium con viewport da iPhone e fallisce s
 1. Crea un repository su GitHub e carica il contenuto di questa cartella sul branch `main`. Con il piano GitHub gratuito, Pages richiede un repository pubblico: il codice è visibile, i tuoi dati no, perché non stanno mai nel repository.
 2. `package-lock.json` è nel repository: la CI installa con `npm ci`, quindi esattamente le versioni del lockfile.
 3. Su GitHub apri **Settings → Pages** e in **Build and deployment** scegli **GitHub Actions** come sorgente.
-4. A ogni push su `main` il workflow `.github/workflows/deploy.yml` compila, esegue test unitari ed end-to-end e pubblica solo se passano. L'indirizzo è `https://<utente>.github.io/<repository>/`. Le action del workflow sono fissate allo SHA del commit: per aggiornarle va cambiato lo SHA, non solo il numero di versione.
+4. A ogni push su `main` il workflow `.github/workflows/deploy.yml` compila, esegue test unitari ed end-to-end e pubblica solo se passano. L'indirizzo è https://ericformentinorg.github.io/MacroCaloriesTrack/. Le action del workflow sono fissate allo SHA del commit: per aggiornarle va cambiato lo SHA, non solo il numero di versione.
 
 ## Installazione su iPhone
 
@@ -71,7 +71,7 @@ Da fare quando si arriva alla sincronizzazione. Le etichette della console Dropb
 1. Vai su https://www.dropbox.com/developers/apps e crea un'app con **Scoped access** e accesso **App folder**.
 2. In **Permissions** abilita `files.metadata.read`, `files.content.read` e `files.content.write`, poi salva.
 3. In **Settings → OAuth 2**:
-   - aggiungi come redirect URI l'indirizzo GitHub Pages dell'app (`https://<utente>.github.io/<repository>/`) e `http://localhost:8080/` per lo sviluppo;
+   - aggiungi come redirect URI `https://ericformentinorg.github.io/MacroCaloriesTrack/` e `http://localhost:8080/` per lo sviluppo;
    - abilita i client pubblici (PKCE).
 4. Annota l'**App key**. È pubblica per natura con PKCE e va nel codice. L'**App secret** non serve e non va mai inserito nell'app.
 
