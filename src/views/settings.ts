@@ -7,6 +7,7 @@ import * as repo from '../repo.js';
 import { clearOffCache, loadCatalog } from '../sources.js';
 import { confirmSheet, h, openSheet, toast } from '../ui.js';
 import { VERSION } from '../version.js';
+import { dropboxSection } from './dropboxSettings.js';
 
 const isAppleMobile = (): boolean =>
   /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1);
@@ -83,7 +84,7 @@ async function sourcesSection(): Promise<HTMLElement> {
 }
 
 export async function settingsView(): Promise<HTMLElement> {
-  const [statusText, sources] = await Promise.all([storageStatus(), sourcesSection()]);
+  const [statusText, sources, dropbox] = await Promise.all([storageStatus(), sourcesSection(), dropboxSection()]);
   const status = h('p', { class: 'muted' }, statusText);
 
   async function exportJSON(): Promise<void> {
@@ -178,6 +179,8 @@ export async function settingsView(): Promise<HTMLElement> {
 
   return h('div', { class: 'view settings' },
     h('header', { class: 'view-head' }, h('h1', null, 'Impostazioni')),
+
+    dropbox,
 
     h('section', { class: 'section' },
       h('h2', null, 'Backup'),

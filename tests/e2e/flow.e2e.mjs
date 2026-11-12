@@ -4,6 +4,7 @@
 // Fallisce su qualunque errore JavaScript o violazione CSP. Le schermate vanno in tests/e2e/screens/.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 
@@ -343,6 +344,107 @@ try {
   assert.equal(await p2.locator('.meal:has(h2:text("Spuntino")) .row').count(), 3);
   assert.match(await p2.textContent('.meal:has(h2:text("Spuntino")) .meal-kcal'), /^502\s*kcal$/);
   await ctx2.close();
+
+  // ---- Fase 3, primo passo: collegamento a Dropbox con l'App key dell'utente (Dropbox simulato).
+  const dbx = { calls: [], files: new Map(), challenge: '', revoked: false };
+  const ctx3 = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
+  await ctx3.addInitScript(() =>
+    document.addEventListener('securitypolicyviolation', (e) => console.error('CSP-VIOLATION', e.violatedDirective, e.blockedURI)),
+  );
+  const dcors = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, Dropbox-API-Arg',
+    'Access-Control-Expose-Headers': 'Dropbox-API-Result',
+  };
+  await ctx3.route(/^https:\/\/(dropbox\.com|api\.dropboxapi\.com|content\.dropboxapi\.com)\//, async (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: dcors });
+    dbx.calls.push(`${u.host}${u.pathname}`);
+    const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: dcors, body: JSON.stringify(body) });
+    if (u.host === 'dropbox.com' && u.pathname === '/oauth2/authorize') {
+      dbx.challenge = u.searchParams.get('code_challenge');
+      return route.fulfill({ status: 200, contentType: 'text/html', body: '<p>Codice: CODICE-DI-PROVA-123</p>' });
+    }
+    if (u.pathname === '/oauth2/token') {
+      const p = new URLSearchParams(req.postData() ?? '');
+      if (p.get('grant_type') !== 'authorization_code' || p.get('code') !== 'CODICE-DI-PROVA-123' || p.get('client_id') !== 'abc123def456ghi') {
+        return json({ error: 'invalid_grant' }, 400);
+      }
+      const challenge = createHash('sha256').update(p.get('code_verifier') ?? '').digest('base64url');
+      if (challenge !== dbx.challenge) return json({ error: 'invalid_grant', error_description: 'PKCE' }, 400);
+      return json({ access_token: 'sl.prova', token_type: 'bearer', expires_in: 14400, refresh_token: 'rt.prova', account_id: 'dbid:prova',
+        scope: 'account_info.read files.content.read files.content.write files.metadata.read' });
+    }
+    if (req.headers()['authorization'] !== 'Bearer sl.prova') return json({ error_summary: 'invalid_access_token/' }, 401);
+    const arg = JSON.parse(req.headers()['dropbox-api-arg'] ?? 'null');
+    const meta = (path, size) => ({ name: path.slice(1), path_lower: path, rev: '0123456789abc', size, server_modified: '2026-11-12T08:00:00Z' });
+    switch (u.pathname) {
+      case '/2/files/list_folder':
+        return json({ entries: [], cursor: 'c1', has_more: false });
+      case '/2/files/upload': {
+        const body = req.postDataBuffer() ?? Buffer.alloc(0);
+        dbx.files.set(arg.path, body);
+        return json(meta(arg.path, body.length));
+      }
+      case '/2/files/download': {
+        const body = dbx.files.get(arg.path);
+        if (!body) return json({ error_summary: 'path/not_found/.' }, 409);
+        return route.fulfill({ status: 200, contentType: 'application/octet-stream', headers: { ...dcors, 'Dropbox-API-Result': JSON.stringify(meta(arg.path, body.length)) }, body });
+      }
+      case '/2/files/delete_v2':
+        dbx.files.delete(JSON.parse(req.postData()).path);
+        return json({ metadata: {} });
+      case '/2/auth/token/revoke':
+        dbx.revoked = true;
+        return route.fulfill({ status: 200, headers: dcors, body: '' });
+    }
+    problems.push(`richiesta Dropbox inattesa: ${req.url()}`);
+    return json({ error_summary: 'other/' }, 400);
+  });
+  const p3 = await ctx3.newPage();
+  p3.on('console', (m) => { if (m.type() === 'error') problems.push(`(dropbox) ${m.text()}`); });
+  p3.on('pageerror', (e) => problems.push(`pageerror(dropbox): ${e.message}`));
+  await p3.goto(BASE + '#/impostazioni');
+  await p3.waitForSelector('.dropbox');
+  await p3.fill('.dropbox input', 'ABC 123');
+  await p3.click('.dropbox button:has-text("Continua")');
+  assert.match(await p3.textContent('.dropbox .form-error'), /App key non sembra valida/);
+  await p3.fill('.dropbox input', 'abc123def456ghi');
+  await p3.click('.dropbox button:has-text("Continua")');
+  const link = p3.locator('.dropbox a:has-text("Apri Dropbox")');
+  await link.waitFor();
+  const href = await link.getAttribute('href');
+  const au = new URL(href);
+  assert.equal(au.searchParams.get('client_id'), 'abc123def456ghi');
+  assert.equal(au.searchParams.get('code_challenge_method'), 'S256');
+  assert.equal(au.searchParams.get('token_access_type'), 'offline');
+  const [popup] = await Promise.all([ctx3.waitForEvent('page'), link.click()]);
+  await popup.waitForLoadState();
+  assert.match(await popup.textContent('body'), /CODICE-DI-PROVA-123/);
+  await popup.close();
+  // iOS può ricaricare la PWA mentre si è su Dropbox: il challenge deve restare lo stesso.
+  await p3.reload();
+  await p3.waitForSelector('.dropbox a:has-text("Apri Dropbox")');
+  assert.equal(await p3.getAttribute('.dropbox a:has-text("Apri Dropbox")', 'href'), href);
+  await p3.screenshot({ path: `${SHOTS}/12-dropbox-codice.png`, fullPage: true });
+  await p3.fill('.dropbox .dbx-code input', '  CODICE-DI-PROVA-123 ');
+  await p3.click('.dropbox button:has-text("Collega")');
+  await p3.waitForSelector('.dropbox :text("Collegato")');
+  await p3.click('.dropbox button:has-text("Prova la connessione")');
+  await p3.waitForSelector('.dropbox [role=status]:has-text("Connessione riuscita")');
+  assert.equal(dbx.files.size, 0, 'il file di prova viene cancellato');
+  await p3.screenshot({ path: `${SHOTS}/13-dropbox-collegato.png`, fullPage: true });
+  await p3.click('.dropbox button:has-text("Scollega Dropbox")');
+  await p3.click('dialog button:has-text("Scollega")');
+  await p3.waitForSelector('.dropbox button:has-text("Continua")');
+  assert.equal(dbx.revoked, true, 'token revocato');
+  assert.deepEqual(
+    [...new Set(dbx.calls)].sort(),
+    ['api.dropboxapi.com/2/auth/token/revoke', 'api.dropboxapi.com/2/files/delete_v2', 'api.dropboxapi.com/2/files/list_folder',
+      'api.dropboxapi.com/oauth2/token', 'content.dropboxapi.com/2/files/download', 'content.dropboxapi.com/2/files/upload', 'dropbox.com/oauth2/authorize'],
+  );
+  await ctx3.close();
 
   // Tema scuro (contesto nuovo = database vuoto: reimporta il backup)
   const dark = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, colorScheme: 'dark' });

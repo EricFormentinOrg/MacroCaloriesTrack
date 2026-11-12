@@ -62,18 +62,22 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 - Nessun `innerHTML` nel codice: testi e file importati non possono iniettare markup.
 - Il backup importato viene validato campo per campo; i campi sconosciuti vengono scartati.
 - Il CSV esportato neutralizza le formule (celle che iniziano con `=`, `+`, `-`, `@`).
-- Con la Fase 3 i file su Dropbox saranno cifrati con AES-GCM 256, con chiave derivata da una passphrase che non lascia il dispositivo.
+- I file su Dropbox saranno cifrati con AES-GCM 256, con chiave derivata da una passphrase che non lascia il dispositivo (sincronizzazione in sviluppo).
+- Dropbox: login OAuth con PKCE e codice da copiare, permesso limitato alla cartella dell'app, nessun segreto nell'app; `connect-src` include solo `api.dropboxapi.com` e `content.dropboxapi.com`.
 
-## Preparazione per la Fase 3 (Dropbox)
+## Collegare Dropbox
 
-Da fare quando si arriva alla sincronizzazione. Le etichette della console Dropbox potrebbero differire leggermente da queste.
+Ogni persona usa il proprio Dropbox tramite una propria app Dropbox: i dati non passano da nessun server dell'app. Le etichette della console Dropbox potrebbero differire leggermente da queste.
 
-1. Vai su https://www.dropbox.com/developers/apps e crea un'app con **Scoped access** e accesso **App folder**.
-2. In **Permissions** abilita `files.metadata.read`, `files.content.read` e `files.content.write`, poi salva.
-3. In **Settings → OAuth 2**:
-   - aggiungi come redirect URI `https://ericformentinorg.github.io/MacroCaloriesTrack/` e `http://localhost:8080/` per lo sviluppo;
-   - abilita i client pubblici (PKCE).
-4. Annota l'**App key**. È pubblica per natura con PKCE e va nel codice. L'**App secret** non serve e non va mai inserito nell'app.
+1. Vai su https://www.dropbox.com/developers/apps e premi **Create app**.
+2. Scegli **Scoped access** e **App folder**, poi un nome: diventa la cartella `Apps/<nome>` nel tuo Dropbox.
+3. In **Permissions** abilita `files.metadata.read`, `files.content.read` e `files.content.write`, poi premi **Submit**.
+4. In **Settings** copia l'**App key**. L'**App secret** non serve e non va mai inserito nell'app.
+5. Nell'app apri **Impostazioni → Sincronizzazione con Dropbox**, incolla l'App key, premi **Apri Dropbox**, consenti l'accesso e incolla il codice che Dropbox mostra.
+
+Non serve configurare redirect URI: il login usa il codice da copiare (OAuth con PKCE). Se Dropbox rifiuta il login dicendo che i client pubblici non sono consentiti, attivali in **Settings → OAuth 2** (non verificato se sia già attivo per le app nuove).
+
+Su ogni dispositivo si ripete il passo 5 con la stessa App key. Token e App key restano nel dispositivo (IndexedDB); "Scollega Dropbox" revoca il token.
 
 ## Aggiornare la banca dati degli alimenti
 

@@ -10,7 +10,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 
 | Tema | Decisione | Motivo |
 |---|---|---|
-| Utenti | Solo Eric | L'app Dropbox resta in modalità sviluppo, senza revisione; nessun backend. |
+| Utenti | Più utenti, ciascuno sui propri dispositivi e con il proprio Dropbox; ognuno crea la propria app Dropbox e ne inserisce l'App key nell'app | Nessun backend e nessuna dipendenza da un'app Dropbox condivisa: niente limite di 500 utenti né revisione Dropbox oltre i 50. Prezzo: configurazione più tecnica per l'utente. Decisa il 12 novembre 2026 (prima: solo Eric). |
 | Foto | Solo etichetta nutrizionale | La stima da foto del piatto richiede un modello vision e ha errori ampi sulle porzioni. |
 | Motore foto | OCR locale (Tesseract.js), con correzione manuale sempre possibile | Gratuito e privato: l'immagine non lascia il dispositivo. |
 | Stack | TypeScript strict, nessuna dipendenza a runtime, IndexedDB nativo, DOM nativo | Superficie d'attacco minima. TypeScript è solo strumento di sviluppo. Sostituisce Vite, Preact e Dexie del piano iniziale. |
@@ -58,7 +58,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 
 ### Fase 0: prove tecniche (parziale)
 - [x] Ciclo cifra, decifra e verifica passphrase (test in Node).
-- [ ] Login Dropbox da PWA installata su iPhone. È il punto più incerto: va provato prima di costruire la sync.
+- [ ] Login Dropbox da PWA installata su iPhone. Implementato con il codice da copiare (nessun ritorno da redirect, che su iOS rischiava di aprirsi in Safari invece che nella PWA); da provare sul dispositivo prima di costruire la sync.
 - [ ] Tesseract.js su circa 10 etichette reali, per misurare la qualità di lettura prima di investire nel parser.
 
 ### Fase 1: diario (completata)
@@ -88,10 +88,10 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - [x] Copia come alimento personale al primo uso (aggiunta al diario o preferito), con provenienza mostrata nell'editor. Le modifiche successive non toccano la fonte.
 
 ### Fase 3: sincronizzazione Dropbox
-- [ ] OAuth PKCE con `state` contro CSRF, token in IndexedDB, rinnovo automatico.
+- [x] App key inserita dall'utente in Impostazioni e salvata in IndexedDB (non è un segreto). Accesso OAuth PKCE con codice da copiare: nessun redirect URI da configurare e nessun problema di ritorno nella PWA su iOS. Token in IndexedDB, rinnovo automatico, disconnessione con revoca. Il challenge resta lo stesso se l'app si ricarica durante il login. "Prova la connessione" scrive, rilegge e cancella un file. Moduli: `src/dropbox.ts` (puro, testato), `src/dropboxClient.ts`, `src/views/dropboxSettings.ts`. Da provare su iPhone.
 - [ ] Prima configurazione: passphrase e controllo; sugli altri dispositivi, verifica col valore di controllo.
 - [ ] Upload e download dei file mensili, merge, upload condizionato alla revisione, coda delle modifiche offline, indicatore di stato.
-- [ ] Domini da aggiungere a `connect-src`: `https://api.dropboxapi.com`, `https://content.dropboxapi.com`.
+- [x] Domini aggiunti a `connect-src`: `https://api.dropboxapi.com`, `https://content.dropboxapi.com` (CORS verificato: entrambi accettano l'origine dell'app ed espongono `Dropbox-API-Result`).
 
 ### Fase 4: etichetta via OCR
 - [ ] Foto o file, ritaglio manuale, pre-elaborazione (scala di grigi, contrasto, ingrandimento).

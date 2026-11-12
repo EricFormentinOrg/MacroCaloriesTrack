@@ -7,6 +7,29 @@ export interface Meta {
   createdAt: number;
 }
 
+/**
+ * Collegamento a Dropbox di questo dispositivo: App key dell'utente e token.
+ * Resta solo in IndexedDB: niente backup, niente sincronizzazione. "Cancella tutti i dati" lo elimina.
+ */
+export interface DropboxAuth {
+  id: 'dropbox';
+  appKey: string;
+  accessToken?: string;
+  expiresAt?: number;
+  refreshToken?: string;
+  accountId?: string;
+  connectedAt?: number;
+}
+
+/** Login in corso: il code verifier PKCE deve sopravvivere se iOS ricarica l'app mentre l'utente è su Dropbox. */
+export interface DropboxPending {
+  id: 'dropbox-pending';
+  appKey: string;
+  verifier: string;
+  challenge: string;
+  at: number;
+}
+
 /** Cache locale di Open Food Facts: non è un dato utente, non va nel backup né in sincronizzazione. */
 export interface CacheRecord {
   key: string;
@@ -18,7 +41,7 @@ export interface Stores {
   foods: Food;
   entries: Entry;
   weights: Weight;
-  kv: Profile | Meta;
+  kv: Profile | Meta | DropboxAuth | DropboxPending;
   cache: CacheRecord;
 }
 
@@ -165,5 +188,12 @@ export async function pruneCache(maxAge: number, maxCount: number, now = Date.no
     else kept++;
     c.continue();
   };
+  await done(t);
+}
+
+export async function deleteKey(store: StoreName, key: string): Promise<void> {
+  const d = await openDb();
+  const t = d.transaction(store, 'readwrite');
+  t.objectStore(store).delete(key);
   await done(t);
 }
