@@ -58,7 +58,10 @@ test('valori dubbi, mancanti e confusioni dell’OCR', () => {
   const none = parseLabel('Ingredienti: farina, acqua, sale.');
   assert.deepEqual(none.values, {}, 'la parola "sale" negli ingredienti non porta valori');
   assert.match(none.notes[0], /Nessun valore/);
-  assert.equal(parseLabel('Grassi 250 g').values.fat, undefined, 'oltre 100 g per 100 g: scartato');
+  // Oltre 100 g per 100 g è impossibile: "250" è quasi certamente "25,0" con la virgola persa.
+  assert.equal(parseLabel('Grassi 250 g').values.fat.value, 25);
+  assert.match(parseLabel('Grassi 250 g').values.fat.doubt, /virgola/);
+  assert.equal(parseLabel('Grassi 2500 g').values.fat, undefined, 'nessuna lettura plausibile: scartato');
   const incoherent = parseLabel('Energia 100 kcal\nGrassi 20 g\nCarboidrati 30 g\nProteine 10 g');
   assert.match(incoherent.warnings[0], /circa 340 kcal/);
   // "< 0,5" più piccolo della sua parte "di cui": prende il valore della parte, resta dubbio.
@@ -72,6 +75,37 @@ test('testo copiato per colonne: abbinamento per posizione, sempre dubbio', () =
   const r = parseLabel('Energia\nGrassi\ndi cui saturi\nCarboidrati\ndi cui zuccheri\nProteine\nSale\n1521 kJ/359 kcal\n2,0 g\n0,5 g\n71 g\n3,5 g\n13 g\n0,01 g');
   assert.deepEqual(vals(r), { kcal: 359, fat: 2, satFat: 0.5, carbs: 71, sugars: 3.5, protein: 13, salt: 0.01 });
   assert.ok(Object.values(r.values).every((v) => /posizione/.test(v.doubt)));
+});
+
+// Testi reali restituiti da Tesseract.js su foto di prova (12/11/2026), con i valori veri letti a vista.
+test('testo OCR reale: virgole perse e "g" letta come 9, corrette con le kcal', () => {
+  const yogurt = parseLabel('DICHIARAZIONE NUTRIZIONALE\nVALORI MEDI PER 100 g\nENERGIA                  197 kJ / 47 kcal\nGRASSI                                           1,5 g\nDI CUI: ACIDI GRASSI SATURI    1,0 g\nCARBOIDRATI                                 4,99\nDI CUI: ZUCCHERI           4,9 9g\nPROTEINE                                     349 |\nSALE                                          0139 |\n');
+  assert.deepEqual(vals(yogurt), { kcal: 47, fat: 1.5, satFat: 1, carbs: 4.9, sugars: 4.9, protein: 3.4, salt: 0.13 });
+  for (const k of ['carbs', 'protein', 'salt']) assert.ok(yogurt.values[k].doubt, `${k} corretto e segnalato`);
+  assert.equal(yogurt.values.fat.doubt, undefined, 'letture pulite senza segnalazione');
+  assert.deepEqual(yogurt.warnings, []);
+
+  const cereal = parseLabel('QUANTITÀ MEDIA\nPER 100 g DI PRODOTTO:\nValore energetico kJ 1596 - kcal 376\nCarboidrati                g 76,5\ndi cui zuccheri             g 13,1\nGrassi                     RR\ndi cui saturi                g 08\nFibre alimentari           gs SA\nSodio                      g 0,70\nIngredienti: riso (60%), frumento\nintegrale (15%), zucchero\n');
+  assert.deepEqual(vals(cereal), { kcal: 376, carbs: 76.5, sugars: 13.1, satFat: 0.8, salt: 1.75 });
+  assert.match(cereal.values.satFat.doubt, /virgola/);
+  assert.match(cereal.values.salt.doubt, /sodio/);
+  assert.deepEqual(cereal.missing, ['fat', 'protein']);
+
+  const table = parseLabel('VALORI NUTRIZIONALI\nGrassi              08g          129             1,1%       1.7%         7049\ndi cui grassi saturi      Og             0g              0,0%       0,0%         20g\nCarboidrati           77g          116 g             29,6%      44 4%        260 g\ndi cui zuccheri        1,79          26g              1,9%       2,8%         90g\nProteine              11 9g           16g             22,0%      33,0%         50 g\nSale                0,01 g         0,02 g             0,2%       0,2%          6g\n');
+  assert.deepEqual(vals(table), { fat: 0.8, satFat: 0, carbs: 77, sugars: 1.7, protein: 11, salt: 0.01 });
+});
+
+test('intestazioni, unità prima del numero, migliaia, sodio', () => {
+  const portionFirst = parseLabel('Valori nutrizionali per porzione (30 g) per 100 g\nEnergia 120 kcal 400 kcal\nGrassi 1,5 g 5,0 g\nCarboidrati 21 g 70 g\nProteine 3 g 10 g');
+  assert.equal(portionFirst.values.fat.value, 5);
+  assert.equal(portionFirst.values.carbs.value, 70);
+  assert.match(portionFirst.values.fat.doubt, /seconda colonna/);
+  assert.equal(parseLabel('Energia kJ 1596 - kcal 376\nGrassi 1 g').values.kcal.value, 376);
+  assert.equal(parseLabel('Energia 1.596 kJ / 376 kcal\nGrassi 1 g').values.kcal.value, 376);
+  assert.equal(parseLabel('Energy 1.596 kJ\nFat 1 g').values.kcal.value, 381, 'punto delle migliaia nei kJ');
+  assert.equal(parseLabel('ENERGIA 197 kJ / 47 keal\nGRASSI 1,5 g').values.kcal.value, 47, '"keal" letto come kcal');
+  const natrium = parseLabel('Brennwert 300 kcal\nNatrium 400 mg');
+  assert.equal(natrium.values.salt.value, 1);
 });
 
 test('input lungo o ostile: limiti e nessun crash', () => {

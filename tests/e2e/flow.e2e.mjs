@@ -227,6 +227,89 @@ try {
   await page.waitForSelector('.meal .row', { timeout: 5000 });
   await ctx.setOffline(false);
 
+  // ---- Settimana, peso, copia, andamento
+  const yesterday = await page.evaluate(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const tomorrow = await page.evaluate(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  await page.goto(BASE + '#/');
+  await page.waitForSelector('.week-strip');
+  assert.equal(await page.locator('.week-strip .wk-day').count(), 7);
+  assert.equal(await page.locator('.week-strip .wk-sel.wk-today.wk-over').count(), 1, 'oggi selezionato e oltre l’obiettivo');
+
+  // Peso dal diario: valore non valido, poi corretto; l'obiettivo si ricalcola.
+  assert.match(await page.textContent('.weight-row'), /82,4\s*kg/);
+  await page.click('.weight-row button:has-text("Modifica")');
+  await page.waitForSelector('dialog.sheet[open]');
+  await page.fill('dialog .qty-input', '5');
+  await page.click('dialog button:has-text("Salva")');
+  assert.match(await page.textContent('dialog .form-error'), /tra 20 e 400 kg/);
+  await page.fill('dialog .qty-input', '81,9');
+  await page.click('dialog button:has-text("Salva")');
+  await page.waitForSelector('dialog.sheet', { state: 'detached' });
+  await page.waitForSelector('.weight-row :text("81,9 kg")');
+  // BMR 10×81,9 + 6,25×180 − 5×35 + 5 = 1774; ×1,55 − 550 = 2199,7 → 2200
+  assert.match(await page.textContent('.hero-sub'), /su 2\.?200$/);
+
+  // Pesata di ieri, dalla settimana.
+  await page.click(`.week-strip a[href="#/diario/${yesterday}"]`);
+  await page.waitForSelector('.weight-row button:has-text("Registra")');
+  assert.match(await page.textContent('.weight-row'), /non registrato/, 'nessuna pesata prima di ieri');
+  await page.click('.weight-row button:has-text("Registra")');
+  await page.fill('dialog .qty-input', '82,6');
+  await page.click('dialog button:has-text("Salva")');
+  await page.waitForSelector('.weight-row :text("82,6 kg")');
+
+  // Copia di un pasto su domani (scelta predefinita da oggi), poi di un pasto su un altro pasto con "Annulla".
+  await page.goto(BASE + '#/');
+  await page.waitForSelector('.meal-copy');
+  await page.click('.meal:has(h2:text("Colazione")) .meal-copy');
+  await page.waitForSelector('dialog.sheet[open]');
+  assert.equal(await page.inputValue('dialog input[type=date]'), tomorrow);
+  await page.click('dialog button:has-text("Copia")');
+  assert.match(await toast(), /Copiato su colazione di domani/);
+  await page.click('.meal:has(h2:text("Pranzo")) .meal-copy');
+  await page.waitForSelector('dialog.sheet[open]');
+  await page.click('dialog .seg-opt:has-text("Cena")');
+  await page.click('dialog button:has-text("Copia")');
+  await page.waitForSelector('#toast.show:has-text("cena di domani")');
+  await page.click('.toast-action');
+  await page.goto(`${BASE}#/diario/${tomorrow}`);
+  await page.waitForSelector('.diary');
+  assert.equal(await page.locator('.meal:has(h2:text("Colazione")) .row').count(), 1);
+  assert.equal(await page.locator('.meal:has(h2:text("Cena")) .row').count(), 0, 'copia annullata');
+
+  // Copia del giorno intero su ieri.
+  await page.goto(BASE + '#/');
+  await page.click('button:has-text("Copia il giorno")');
+  await page.waitForSelector('dialog.sheet[open]');
+  await page.click('dialog .chip:has-text("Ieri")');
+  await page.click('dialog button:has-text("Copia")');
+  assert.match(await toast(), /Copiato su ieri/);
+  await page.goto(`${BASE}#/diario/${yesterday}`);
+  await page.waitForSelector('.diary');
+  assert.equal(await page.locator('.meal .row').count(), 6);
+  await page.goto(BASE + '#/');
+  await page.waitForSelector('.week-strip');
+  await page.screenshot({ path: `${SHOTS}/16-diario-settimana.png`, fullPage: true });
+
+  // Andamento: grafici del peso e delle calorie, settimane, cambio di periodo.
+  await page.click('a[data-tab="andamento"]');
+  await page.waitForSelector('.trends');
+  assert.equal(await page.locator('.trends svg.chart').count(), 2, 'grafico del peso e delle calorie');
+  assert.match(await page.textContent('.trends .trend-big'), /81,9\s*kg/);
+  assert.ok(await page.locator('.weeks-table tbody tr').count() >= 1);
+  await page.click('.trends .seg-opt:has-text("2 settimane")');
+  await page.waitForSelector('.trends .seg-opt input[value="14"]:checked');
+  assert.equal(await page.locator('.trends svg.chart').count(), 2);
+  await page.screenshot({ path: `${SHOTS}/17-andamento.png`, fullPage: true });
+
   // ---- Fase 2: banca dati svizzera, Open Food Facts (simulato), preferiti.
   // Contesto nuovo senza service worker: page.route intercetta in modo affidabile e la CI non chiama mai OFF.
   const off = { calls: [] };
@@ -565,6 +648,9 @@ try {
   await dp.goto(BASE + '#/');
   await dp.waitForSelector('.meal .row');
   await dp.screenshot({ path: `${SHOTS}/08-tema-scuro.png`, fullPage: true });
+  await dp.click('a[data-tab="andamento"]');
+  await dp.waitForSelector('.trends');
+  await dp.screenshot({ path: `${SHOTS}/18-andamento-scuro.png`, fullPage: true });
 
   assert.deepEqual(problems, [], 'errori JavaScript o violazioni CSP');
   console.log('e2e: tutti i controlli superati');

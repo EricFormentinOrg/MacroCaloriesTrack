@@ -25,14 +25,15 @@ Dopo ogni modifica: `npm run build && npm test`. Dopo modifiche alla UI esegui a
   - `src/catalog.ts` (banca dati svizzera), `src/off.ts` (Open Food Facts: URL, validazione, limiti);
   - `src/dropbox.ts` (Dropbox: PKCE, URL, validazione delle risposte, classificazione degli errori);
   - `src/sync.ts` (motore di sincronizzazione con adattatori: meta, cifratura dei file, merge, conflitti);
-  - `src/label.ts` (lettura della tabella nutrizionale da testo: voci multilingua, valori per 100 g, dubbi).
+  - `src/label.ts` (lettura della tabella nutrizionale da testo: voci multilingua, valori per 100 g, letture alternative scelte con le kcal, dubbi);
+  - `src/stats.ts` (totali per giorno, settimane, tendenza del peso, scala degli assi).
 - `src/sources.ts`: caricamento della banca dati e chiamate a Open Food Facts con cache in IndexedDB.
 - `src/dropboxClient.ts`: login con codice, token in IndexedDB (`kv`: `dropbox`, `dropbox-pending`), rinnovo, RPC, upload condizionato, download.
 - `src/syncService.ts`: adattatori IndexedDB e Dropbox per `sync.ts`, chiave (`kv`: `sync-key`) e stato (`sync-state`), sincronizzazione automatica. Le scritture della sync usano `putBatch(..., silent)` per non rilanciarla.
 - `src/db.ts`: IndexedDB nativo. `src/repo.ts`: operazioni di dominio.
-- `src/ui.ts`: helper `h()`, toast, fogli modali (`<dialog>`), controlli. `src/components.ts`: elementi condivisi.
+- `src/ui.ts`: helper `h()` e `svg()` (sempre `createElement`/`createElementNS`), icone, toast, fogli modali (`<dialog>`), controlli. `src/components.ts`: elementi condivisi.
 - `src/router.ts`: routing su hash. `src/nav.ts`: `refresh()` della vista corrente.
-- `src/views/*`: diario, aggiunta, elenco alimenti, editor alimento, profilo, impostazioni (con `dropboxSettings.ts`), foglio quantità.
+- `src/views/*`: diario (settimana, peso, copia), andamento (`trends.ts`, grafici SVG), aggiunta, elenco alimenti, editor alimento, profilo, impostazioni (con `dropboxSettings.ts`), foglio quantità, fogli di peso e copia (`sheets.ts`).
 - `public/`: `index.html` (con la CSP), `sw.js`, `css/app.css`, font, icone, manifest, `data/alimenti-ch.json` (generato da `scripts/import-ch.mjs`, non modificarlo a mano).
 - `tests/*.test.mjs`: test unitari. `tests/e2e/flow.e2e.mjs`: test end-to-end; Open Food Facts e Dropbox sono sempre simulati con `route`, mai chiamati davvero.
 

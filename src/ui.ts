@@ -34,6 +34,37 @@ export function h<K extends keyof HTMLElementTagNameMap>(tag: K, props?: Props |
   return el;
 }
 
+// ---- SVG (grafici, icone): createElementNS, mai markup in stringa
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+type SvgChild = SVGElement | string | null | undefined | false;
+
+export function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs?: Record<string, string | number | null | undefined | false> | null, ...children: SvgChild[]): SVGElementTagNameMap[K] {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs ?? {})) {
+    if (v === null || v === undefined || v === false) continue;
+    el.setAttribute(k, String(v));
+  }
+  for (const c of children) {
+    if (c === null || c === undefined || c === false) continue;
+    el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return el;
+}
+
+/** Icone a tratto 24×24, coerenti con quelle della barra delle schede. */
+export function icon(paths: ReadonlyArray<string>, label?: string): SVGSVGElement {
+  return svg('svg', {
+    viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+    'aria-hidden': label ? undefined : 'true', role: label ? 'img' : undefined, 'aria-label': label, class: 'ico',
+  }, ...paths.map((d) => svg('path', { d })));
+}
+
+export const ICONS = {
+  copy: ['M9 9h10v10H9z', 'M5 15V5h10'],
+  scale: ['M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z', 'M8.5 9a5 5 0 0 1 7 0', 'M12 9l1.2-1.6'],
+} as const;
+
 // ---- Toast
 
 let toastTimer: number | undefined;

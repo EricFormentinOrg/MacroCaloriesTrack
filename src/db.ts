@@ -182,6 +182,13 @@ export async function entriesByDate(date: string): Promise<Entry[]> {
   return wrap(idx.getAll(IDBKeyRange.only(date))) as Promise<Entry[]>;
 }
 
+/** Voci tra due date comprese, tombstone comprese. */
+export async function entriesBetween(from: string, to: string): Promise<Entry[]> {
+  const d = await openDb();
+  const idx = d.transaction('entries').objectStore('entries').index('date');
+  return wrap(idx.getAll(IDBKeyRange.bound(from, to))) as Promise<Entry[]>;
+}
+
 /** Voci di un mese (AAAA-MM), tombstone comprese. */
 export async function entriesByMonth(month: string): Promise<Entry[]> {
   const d = await openDb();

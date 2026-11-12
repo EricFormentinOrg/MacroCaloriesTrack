@@ -102,19 +102,22 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - [x] Senza librerie: "Leggi dall'etichetta" nell'editor accetta il testo copiato con Testo live di iOS (o Google Lens) e compila i campi.
 - [ ] Foto o file, ritaglio manuale, pre-elaborazione (scala di grigi, contrasto, ingrandimento).
 - [ ] Tesseract.js self-hosted: worker, core WASM e modelli di lingua serviti da `public/`, caricati solo al primo uso. Lingue iniziali: italiano, inglese, tedesco, francese. In attesa dell'approvazione di Eric. Dati verificati il 12 novembre 2026: tesseract.js 7.0.0 e tesseract.js-core 6.1.2 (Apache-2.0); core SIMD-LSTM 2,87 MB di WASM; modelli LSTM `4.0.0_best_int` compressi: ita 1,66 MB, eng 2,95 MB, deu 1,33 MB, fra 0,71 MB (pacchetti `@tesseract.js-data/*` 1.0.0, MIT).
-- [x] Parser `src/label.ts` (puro, testato): voci in italiano, inglese, tedesco e francese; primo valore della riga (colonna per 100 g/ml); unità ml riconosciuta; kJ convertiti; mg in g; "< x" inserito 0 o come la voce "di cui"; correzioni O→0 e l→1 tipiche dell'OCR; testo copiato per colonne abbinato per posizione. Ogni valore incerto è segnalato.
+- [x] Parser `src/label.ts` (puro, testato). Dal 12 novembre 2026 considera anche le letture alternative tipiche degli errori (virgola persa, "g" letta come 9, zero iniziale, "keal", unità prima del numero, punto delle migliaia, sodio al posto del sale, colonna per 100 g seconda dopo la porzione) e sceglie la combinazione coerente con le kcal dichiarate; se nessuna lo è, lascia le letture letterali e l'editor mostra l'incoerenza. Sugli stessi testi OCR della prova: da 12 a 20 valori esatti su 43, errori da 6 a 3 (1 non segnalato). Dettagli iniziali: voci in italiano, inglese, tedesco e francese; primo valore della riga (colonna per 100 g/ml); unità ml riconosciuta; kJ convertiti; mg in g; "< x" inserito 0 o come la voce "di cui"; correzioni O→0 e l→1 tipiche dell'OCR; testo copiato per colonne abbinato per posizione. Ogni valore incerto è segnalato.
 - [x] Controlli di plausibilità dell'editor applicati ai valori letti.
 - [x] Risultato precompilato nell'editor alimento, con i campi dubbi evidenziati e spiegati; correggere un campo toglie l'evidenza. Manca la foto accanto (arriva con l'OCR).
 - [ ] CSP: verificato in Chromium il 12 novembre 2026 che un worker caricato da un file dello stesso sito compila WebAssembly anche con la CSP attuale (la CSP in meta non si applica al worker; GitHub Pages non invia header CSP), mentre nel thread principale è bloccato e i worker `blob:` sono vietati da `worker-src 'self'`. Con `workerBlobURL: false` non servirebbe `'wasm-unsafe-eval'`. Da verificare su Safari iOS.
 
-### Fase 5: storico e portabilità (parziale)
+### Fase 5: storico e portabilità (completata)
 - [x] Export JSON completo, con i tombstone.
 - [x] Import con validazione rigorosa: file intero rifiutato se un record non è valido, campi sconosciuti scartati, anteprima, poi "Unisci" o "Sostituisci".
 - [x] CSV del diario per Excel in italiano: separatore `;`, virgola decimale, formule neutralizzate.
-- [ ] Calendario, medie settimanali, grafici di peso e calorie.
+- [x] Settimana nel diario: sette giorni con una barretta per lo stato rispetto all'obiettivo (entro ±10%, sotto, oltre il 5%), tocco per spostarsi; il selettore della data resta sul titolo.
+- [x] Pesata dal diario (riga "Peso": registra, modifica, elimina con annulla), obiettivo ricalcolato col peso del giorno.
+- [x] Scheda Andamento (`src/views/trends.ts`, calcoli in `src/stats.ts`, puro e testato): periodo di 2 settimane, 1 mese o 3 mesi; peso con punti, media mobile a 7 giorni e obiettivo; variazione mostrata solo su almeno una settimana di pesate; calorie per giorno (per settimana sui 3 mesi) con l'obiettivo di ciascun giorno; medie dei macronutrienti; tabella delle settimane. Grafici in SVG costruiti con `createElementNS`.
 
-### Fase 6: rifiniture
-- [ ] Ricette e pasti salvati, copia di un giorno.
+### Fase 6: rifiniture (parziale)
+- [x] Copia di un pasto (anche su un altro pasto) o di un giorno intero su un'altra data, con scorciatoie Oggi, Domani e Ieri e "Annulla" nel toast. Le copie hanno id nuovi e gli stessi valori registrati.
+- [ ] Ricette e pasti salvati.
 - [ ] Lettura del codice a barre con Open Food Facts: per i confezionati è più affidabile dell'OCR.
 
 ## Limiti da accettare

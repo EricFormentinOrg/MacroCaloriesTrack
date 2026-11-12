@@ -148,6 +148,36 @@ a { color: var(--accent); }
 }
 .icon-btn:active { background: var(--track); }
 
+/* ---- Settimana: un tocco per giorno, barretta per lo stato rispetto all'obiettivo */
+
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin: -8px 0 24px;
+}
+.wk-day {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-height: 56px;
+  padding: 6px 0 7px;
+  border-radius: 12px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.wk-letter { font-size: .6875rem; font-weight: 600; color: var(--ink-3); }
+.wk-num { font-size: 1rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.wk-bar { width: 22px; height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; }
+.wk-fill { display: block; height: 100%; background: var(--ink-3); }
+.wk-ok .wk-fill { background: var(--accent); }
+.wk-under .wk-fill { background: var(--m3); }
+.wk-over .wk-fill { background: var(--protein); }
+.wk-today .wk-num { color: var(--accent); font-weight: 700; }
+.wk-sel { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--rule); }
+.wk-sel .wk-letter { color: var(--ink-2); }
+.wk-day:active { background: var(--track); }
+
 /* ---- Budget del giorno */
 
 .hero { margin-bottom: 30px; }
@@ -198,6 +228,26 @@ a { color: var(--accent); }
 .macro-fat .macro-fill { background: var(--fat); }
 .macro.over .macro-val { color: var(--protein); font-weight: 600; }
 
+/* ---- Peso del giorno */
+
+.weight-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -12px 0 6px;
+  padding: 6px 0 6px 2px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.weight-row .ico { width: 22px; height: 22px; color: var(--ink-3); flex: none; }
+.weight-main { flex: 1; display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.weight-label { font-size: .9375rem; }
+.weight-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+.weight-none { color: var(--ink-3); font-size: .875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.weight-row .btn-small { min-height: 44px; padding: 0 10px; background: none; color: var(--accent); }
+
+.day-hint { color: var(--ink-2); margin: 18px 0 -6px; max-width: 46ch; }
+
 /* ---- Pasti e righe */
 
 .meal { margin-top: 24px; }
@@ -205,6 +255,11 @@ a { color: var(--accent); }
 .meal-head h2 { flex: 1; }
 .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .meal-kcal { color: var(--ink-2); font-size: .9375rem; }
+.meal-copy { width: 40px; height: 44px; color: var(--ink-3); border-radius: 10px; }
+.meal-copy .ico { width: 20px; height: 20px; }
+.copy-day { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; }
+.copy-day .ico { width: 18px; height: 18px; }
+.ico { flex: none; }
 .link-add {
   font-weight: 600;
   text-decoration: none;
@@ -410,6 +465,49 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .section { margin-top: 28px; display: grid; gap: 10px; justify-items: start; }
 .section > p { color: var(--ink-2); max-width: 60ch; }
 .stack { display: grid; gap: 10px; width: 100%; }
+
+/* ---- Fogli: scorciatoie di data, unità accanto al numero */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -6px; }
+.chip {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: .875rem;
+  cursor: pointer;
+}
+.chip:active { background: var(--track); }
+.unit-big { font-size: 1.125rem; color: var(--ink-2); align-self: center; }
+
+/* ---- Andamento */
+.trends .seg { margin-bottom: 4px; }
+.trend-block { justify-items: stretch; }
+.trend-big { font-family: var(--serif); font-size: 1.75rem; line-height: 1.15; }
+.trend-big .num { font-weight: 700; }
+.trend-when { font-family: var(--sans); font-size: .9375rem; color: var(--ink-2); }
+.trend-sub { color: var(--ink-2); font-size: .9375rem; }
+.trend-macros { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .875rem; font-variant-numeric: tabular-nums; }
+.trend-block > .btn { justify-self: start; }
+.trend-block .extra { margin-top: 0; }
+
+.chart { width: 100%; height: auto; display: block; margin: 4px 0; overflow: visible; }
+.ch-grid { stroke: var(--rule); stroke-width: 1; }
+.ch-label { fill: var(--ink-3); font-family: var(--sans); font-size: 10px; font-variant-numeric: tabular-nums; }
+.ch-point { fill: var(--ink-2); }
+.ch-trend { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.ch-target { fill: none; stroke: var(--fat); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.ch-bar { fill: var(--m2); }
+.ch-bar.over { fill: var(--protein); }
+
+.table-wrap { width: 100%; overflow-x: auto; }
+.weeks-table { width: 100%; border-collapse: collapse; font-size: .875rem; font-variant-numeric: tabular-nums; }
+.weeks-table th, .weeks-table td { padding: 9px 6px; text-align: left; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.weeks-table thead th { color: var(--ink-3); font-weight: 600; font-size: .8125rem; }
+.weeks-table tbody th { font-weight: 500; }
+.weeks-table .n { text-align: right; }
 .howto { width: 100%; color: var(--ink-2); }
 .howto summary { cursor: pointer; padding: 10px 0; font-weight: 500; color: var(--accent); }
 .steps { margin: 4px 0 8px; padding-left: 22px; display: grid; gap: 6px; }

@@ -8,8 +8,9 @@ import { foodEditView } from './views/foodEdit.js';
 import { foodsView } from './views/foods.js';
 import { profileView } from './views/profile.js';
 import { settingsView } from './views/settings.js';
+import { trendsView } from './views/trends.js';
 
-type Tab = 'diario' | 'alimenti' | 'profilo' | 'impostazioni';
+type Tab = 'diario' | 'andamento' | 'alimenti' | 'profilo' | 'impostazioni';
 
 interface Route {
   tab: Tab;
@@ -30,6 +31,8 @@ function resolve(hash: string): Route {
       const ctx = isISODate(b) && isMeal(c) ? { date: b, meal: c } : undefined;
       return { tab: ctx ? 'diario' : 'alimenti', render: () => foodEditView(a ?? 'nuovo', ctx) };
     }
+    case 'andamento':
+      return { tab: 'andamento', render: trendsView };
     case 'profilo':
       return { tab: 'profilo', render: profileView };
     case 'impostazioni':

@@ -134,6 +134,35 @@ export async function restoreEntry(e: Entry): Promise<void> {
   await db.put('entries', clean({ ...e, deleted: undefined, updatedAt: now() }));
 }
 
+export async function entriesBetween(from: string, to: string): Promise<Entry[]> {
+  return (await db.entriesBetween(from, to)).filter((e) => !e.deleted);
+}
+
+/**
+ * Copia voci su un altro giorno (e, se indicato, su un altro pasto). Le copie hanno id nuovi e
+ * gli stessi valori registrati: non dipendono dall'alimento attuale.
+ */
+export async function copyEntries(list: ReadonlyArray<Entry>, date: string, meal?: Meal): Promise<Entry[]> {
+  const t = now();
+  const copies = list.filter((e) => !e.deleted).map((e, i): Entry => clean({
+    ...e,
+    id: newId(),
+    date,
+    meal: meal ?? e.meal,
+    createdAt: t + i,
+    updatedAt: t,
+    deleted: undefined,
+  }));
+  await db.putBatch({ entries: copies });
+  return copies;
+}
+
+/** Elimina più voci insieme (tombstone): serve ad annullare una copia. */
+export async function deleteEntries(list: ReadonlyArray<Entry>): Promise<void> {
+  const t = now();
+  await db.putBatch({ entries: list.map((e) => ({ ...e, deleted: true, updatedAt: t })) });
+}
+
 /** Ultima voce per alimento, dalla più recente: serve per "recenti" e per la quantità predefinita. */
 export async function recentUsage(limit: number): Promise<Map<string, Entry>> {
   const rows = (await db.recentEntries(400)).filter((e) => !e.deleted);
@@ -168,6 +197,21 @@ export async function weightOn(date: string): Promise<Weight | undefined> {
 
 export async function setWeight(date: string, kg: number): Promise<void> {
   await db.put('weights', { id: date, date, kg, updatedAt: now() });
+}
+
+export async function deleteWeight(date: string): Promise<void> {
+  const w = await db.get('weights', date);
+  if (w && !w.deleted) await db.put('weights', { ...w, deleted: true, updatedAt: now() });
+}
+
+/** Pesate vive, dalla più vecchia. */
+export async function listWeights(): Promise<Weight[]> {
+  return (await db.getAll('weights')).filter((w) => !w.deleted).sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+export async function getWeight(date: string): Promise<Weight | undefined> {
+  const w = await db.get('weights', date);
+  return alive(w) ? w : undefined;
 }
 
 // ---- Backup

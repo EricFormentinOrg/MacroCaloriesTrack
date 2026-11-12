@@ -2,7 +2,7 @@
 
 Diario alimentare personale: calorie e macronutrienti per pasto, obiettivo calcolato da profilo e peso, storico, backup. Funziona offline come app installata sulla schermata Home dell'iPhone. I dati restano sul dispositivo; solo le ricerche su Open Food Facts escono, e solo quando le chiedi.
 
-Stato: Fasi 1 e 2 completate (diario, alimenti generici della banca dati svizzera, prodotti di Open Food Facts, preferiti). Le prossime fasi sono la sincronizzazione Dropbox e l'OCR delle etichette. Il dettaglio è in [docs/PIANO.md](docs/PIANO.md).
+Stato: diario con settimana e pesate, banca dati svizzera, Open Food Facts, preferiti, copia di pasti e giorni, sincronizzazione cifrata su Dropbox, valori dall'etichetta con Testo live e scheda Andamento (peso, calorie, medie settimanali). Restano ricette e lettura del codice a barre. Il dettaglio è in [docs/PIANO.md](docs/PIANO.md).
 
 ## Requisiti
 
