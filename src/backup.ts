@@ -201,6 +201,21 @@ function list<T>(v: unknown, name: string, fn: (o: unknown) => T, errs: string[]
   return out;
 }
 
+export type RecordKind = 'profile' | 'foods' | 'entries' | 'weights';
+
+const PARSERS: Record<RecordKind, (o: unknown) => SyncRecord> = { profile, foods: food, entries: entry, weights: weight };
+
+/**
+ * Valida un elenco di record con le stesse regole del backup (usato anche per i file da Dropbox).
+ * Lancia un errore se anche un solo record non è valido: niente import parziali.
+ */
+export function parseRecords(kind: RecordKind, v: unknown): SyncRecord[] {
+  const errs: string[] = [];
+  const out = list(v, kind, PARSERS[kind], errs);
+  if (errs.length) throw new Error(`dati non validi: ${errs.slice(0, 3).join('; ')}`);
+  return out;
+}
+
 export function parseBackup(text: string): ParseResult {
   let obj: unknown;
   try {

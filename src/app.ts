@@ -1,6 +1,7 @@
 import { openDb } from './db.js';
 import { ensureMeta } from './repo.js';
 import { startRouter } from './router.js';
+import { startAutoSync } from './syncService.js';
 import { h, toast } from './ui.js';
 
 function registerServiceWorker(): void {
@@ -25,6 +26,7 @@ async function main(): Promise<void> {
   }
   startRouter(root);
   registerServiceWorker();
+  startAutoSync();
   // Senza persistenza il browser può svuotare IndexedDB sotto pressione di spazio.
   navigator.storage?.persist?.().catch(() => {});
 }

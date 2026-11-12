@@ -62,7 +62,7 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 - Nessun `innerHTML` nel codice: testi e file importati non possono iniettare markup.
 - Il backup importato viene validato campo per campo; i campi sconosciuti vengono scartati.
 - Il CSV esportato neutralizza le formule (celle che iniziano con `=`, `+`, `-`, `@`).
-- I file su Dropbox saranno cifrati con AES-GCM 256, con chiave derivata da una passphrase che non lascia il dispositivo (sincronizzazione in sviluppo).
+- I file su Dropbox sono cifrati con AES-GCM 256, con chiave derivata dalla passphrase (PBKDF2-SHA256, 600.000 iterazioni). La passphrase non lascia mai il dispositivo; la chiave resta in IndexedDB come `CryptoKey` non estraibile. Il percorso del file è dato autenticato: un file spostato o scambiato non si decifra. Ogni file scaricato viene validato come un backup.
 - Dropbox: login OAuth con PKCE e codice da copiare, permesso limitato alla cartella dell'app, nessun segreto nell'app; `connect-src` include solo `api.dropboxapi.com` e `content.dropboxapi.com`.
 
 ## Collegare Dropbox
@@ -78,6 +78,13 @@ Ogni persona usa il proprio Dropbox tramite una propria app Dropbox: i dati non 
 Non serve configurare redirect URI: il login usa il codice da copiare (OAuth con PKCE). Se Dropbox rifiuta il login dicendo che i client pubblici non sono consentiti, attivali in **Settings → OAuth 2** (non verificato se sia già attivo per le app nuove).
 
 Su ogni dispositivo si ripete il passo 5 con la stessa App key. Token e App key restano nel dispositivo (IndexedDB); "Scollega Dropbox" revoca il token.
+
+### Sincronizzazione tra dispositivi
+
+- **Primo dispositivo**: dopo il collegamento l'app chiede di creare una passphrase. Se la dimentichi, i dati su Dropbox non si recuperano: conservala in un gestore di password.
+- **Altri dispositivi**: stessa App key, stesso Dropbox, stessa passphrase. I dati del dispositivo e quelli su Dropbox vengono uniti.
+- Le modifiche partono da sole pochi secondi dopo, all'apertura dell'app e al ritorno della connessione; offline l'app funziona e recupera al primo collegamento. In **Impostazioni** c'è lo stato e "Sincronizza ora".
+- Nella cartella `Apps/<nome>` trovi `meta.json` (salt e valore di controllo, in chiaro), `profile.enc`, `foods.enc`, `weights.enc` e `diary/AAAA-MM.enc`: non modificarli a mano.
 
 ## Aggiornare la banca dati degli alimenti
 

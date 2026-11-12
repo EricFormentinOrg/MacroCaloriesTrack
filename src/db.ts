@@ -30,6 +30,21 @@ export interface DropboxPending {
   at: number;
 }
 
+/** Chiave AES della sincronizzazione: CryptoKey non estraibile, mai la passphrase. */
+export interface SyncKeyRecord {
+  id: 'sync-key';
+  key: CryptoKey;
+  at: number;
+}
+
+/** Stato della sincronizzazione: revisione e impronta di ogni file remoto, esito dell'ultimo giro. */
+export interface SyncStateRecord {
+  id: 'sync-state';
+  files: Record<string, { rev: string; hash: string }>;
+  lastSync?: number;
+  lastError?: string;
+}
+
 /** Cache locale di Open Food Facts: non è un dato utente, non va nel backup né in sincronizzazione. */
 export interface CacheRecord {
   key: string;
@@ -41,7 +56,7 @@ export interface Stores {
   foods: Food;
   entries: Entry;
   weights: Weight;
-  kv: Profile | Meta | DropboxAuth | DropboxPending;
+  kv: Profile | Meta | DropboxAuth | DropboxPending | SyncKeyRecord | SyncStateRecord;
   cache: CacheRecord;
 }
 
@@ -104,8 +119,25 @@ export async function getAll<K extends StoreName>(store: K): Promise<Stores[K][]
   return wrap(d.transaction(store).objectStore(store).getAll()) as Promise<Stores[K][]>;
 }
 
-/** Scrive più store in un'unica transazione: o tutto o niente. */
-export async function putBatch(batch: Batch): Promise<void> {
+// ---- Notifica delle modifiche ai dati utente (per la sincronizzazione automatica)
+
+type ChangeListener = () => void;
+const listeners = new Set<ChangeListener>();
+
+export function onDataChange(fn: ChangeListener): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function touchesUserData(batch: Batch): boolean {
+  return !!(batch.foods?.length || batch.entries?.length || batch.weights?.length || batch.kv?.some((r) => r.id === 'profile'));
+}
+
+/**
+ * Scrive più store in un'unica transazione: o tutto o niente.
+ * silent: scrittura che arriva dalla sincronizzazione, non va notificata (eviterebbe un giro inutile).
+ */
+export async function putBatch(batch: Batch, silent = false): Promise<void> {
   const names = (Object.keys(batch) as StoreName[]).filter((n) => (batch[n]?.length ?? 0) > 0);
   if (!names.length) return;
   const d = await openDb();
@@ -115,6 +147,7 @@ export async function putBatch(batch: Batch): Promise<void> {
     for (const v of batch[n] ?? []) s.put(v);
   }
   await done(t);
+  if (!silent && touchesUserData(batch)) for (const fn of listeners) fn();
 }
 
 export function put<K extends StoreName>(store: K, value: Stores[K]): Promise<void> {
@@ -132,6 +165,7 @@ export async function replaceAll(batch: Batch): Promise<void> {
     for (const v of batch[n] ?? []) s.put(v);
   }
   await done(t);
+  for (const fn of listeners) fn();
 }
 
 export async function clearAll(): Promise<void> {
@@ -146,6 +180,13 @@ export async function entriesByDate(date: string): Promise<Entry[]> {
   const d = await openDb();
   const idx = d.transaction('entries').objectStore('entries').index('date');
   return wrap(idx.getAll(IDBKeyRange.only(date))) as Promise<Entry[]>;
+}
+
+/** Voci di un mese (AAAA-MM), tombstone comprese. */
+export async function entriesByMonth(month: string): Promise<Entry[]> {
+  const d = await openDb();
+  const idx = d.transaction('entries').objectStore('entries').index('date');
+  return wrap(idx.getAll(IDBKeyRange.bound(`${month}-01`, `${month}-31`))) as Promise<Entry[]>;
 }
 
 /** Le voci più recenti per data, senza leggere tutto lo storico. */

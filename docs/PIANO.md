@@ -58,7 +58,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 
 ### Fase 0: prove tecniche (parziale)
 - [x] Ciclo cifra, decifra e verifica passphrase (test in Node).
-- [ ] Login Dropbox da PWA installata su iPhone. Implementato con il codice da copiare (nessun ritorno da redirect, che su iOS rischiava di aprirsi in Safari invece che nella PWA); da provare sul dispositivo prima di costruire la sync.
+- [x] Login Dropbox da PWA installata su iPhone, con il codice da copiare (nessun ritorno da redirect, che su iOS rischiava di aprirsi in Safari invece che nella PWA). "Prova la connessione" riuscita il 12 novembre 2026, riferito da Eric.
 - [ ] Tesseract.js su circa 10 etichette reali, per misurare la qualità di lettura prima di investire nel parser.
 
 ### Fase 1: diario (completata)
@@ -87,10 +87,15 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - [x] Preferiti (`favorite` sull'alimento, sincronizzato come gli altri campi): stella negli elenchi, sezione "Preferiti" in Aggiungi e in Alimenti.
 - [x] Copia come alimento personale al primo uso (aggiunta al diario o preferito), con provenienza mostrata nell'editor. Le modifiche successive non toccano la fonte.
 
-### Fase 3: sincronizzazione Dropbox
-- [x] App key inserita dall'utente in Impostazioni e salvata in IndexedDB (non è un segreto). Accesso OAuth PKCE con codice da copiare: nessun redirect URI da configurare e nessun problema di ritorno nella PWA su iOS. Token in IndexedDB, rinnovo automatico, disconnessione con revoca. Il challenge resta lo stesso se l'app si ricarica durante il login. "Prova la connessione" scrive, rilegge e cancella un file. Moduli: `src/dropbox.ts` (puro, testato), `src/dropboxClient.ts`, `src/views/dropboxSettings.ts`. Da provare su iPhone.
-- [ ] Prima configurazione: passphrase e controllo; sugli altri dispositivi, verifica col valore di controllo.
-- [ ] Upload e download dei file mensili, merge, upload condizionato alla revisione, coda delle modifiche offline, indicatore di stato.
+### Fase 3: sincronizzazione Dropbox (implementata, da provare con due dispositivi reali)
+- [x] App key inserita dall'utente in Impostazioni e salvata in IndexedDB (non è un segreto). Accesso OAuth PKCE con codice da copiare: nessun redirect URI da configurare e nessun problema di ritorno nella PWA su iOS. Token in IndexedDB, rinnovo automatico, disconnessione con revoca. Il challenge resta lo stesso se l'app si ricarica durante il login. "Prova la connessione" scrive, rilegge e cancella un file. Moduli: `src/dropbox.ts` (puro, testato), `src/dropboxClient.ts`, `src/views/dropboxSettings.ts`. Login provato su iPhone il 12 novembre 2026.
+- [x] Prima configurazione: passphrase (almeno 12 caratteri, ripetuta) e `meta.json` con salt e valore di controllo, creato in modo esclusivo (se un altro dispositivo lo crea nello stesso momento, si passa alla verifica). Sugli altri dispositivi la passphrase è verificata col valore di controllo prima di toccare i dati. La chiave è una `CryptoKey` non estraibile in IndexedDB; se il browser non la sa salvare resta in memoria e alla riapertura serve di nuovo la passphrase.
+- [x] Motore puro `src/sync.ts`, testato in Node con due dispositivi e un Dropbox in memoria:
+  - per ogni file: download se la revisione remota è cambiata, decifratura, validazione con le regole del backup (record, mese giusto, niente duplicati), merge per record in locale;
+  - upload se l'impronta (SHA-256 del JSON canonico) differisce da quella remota nota, condizionato alla revisione (`strict_conflict`); su conflitto rilegge, unisce e riprova (fino a 4 volte);
+  - nessuna coda esplicita: le modifiche fatte offline risultano diverse dall'ultima impronta e partono al giro successivo.
+- [x] `src/syncService.ts`: sincronizzazione 3 secondi dopo ogni modifica, all'apertura, al ritorno online e quando l'app torna in primo piano. Stato in Impostazioni (ultima sincronizzazione, errore), "Sincronizza ora", avviso quando arrivano modifiche. Il ridisegno automatico tocca solo Diario e Alimenti, per non cancellare ciò che si sta scrivendo.
+- [x] e2e con due dispositivi su un Dropbox simulato condiviso: passphrase diverse rifiutate, dati cifrati (nessun nome in chiaro sui file), invio automatico, ricezione, scollegamento che revoca il token e dimentica la chiave.
 - [x] Domini aggiunti a `connect-src`: `https://api.dropboxapi.com`, `https://content.dropboxapi.com` (CORS verificato: entrambi accettano l'origine dell'app ed espongono `Dropbox-API-Result`).
 
 ### Fase 4: etichetta via OCR
@@ -121,6 +126,13 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - **iPhone**: l'app va installata sulla schermata Home e va concessa l'archiviazione persistente, altrimenti Safari può cancellare i dati dopo giorni di inattività.
 - **Repository pubblico**: con il piano GitHub gratuito, Pages richiede un repository pubblico. Il codice è visibile, i dati no.
 
+- **Sincronizzazione**:
+  - vince la modifica più recente per record (`updatedAt`): con gli orologi dei dispositivi sfasati, due modifiche quasi simultanee allo stesso record possono risolversi a favore di quella "sbagliata";
+  - cambiare la passphrase non è ancora possibile (richiede di cifrare di nuovo tutti i file);
+  - "Cancella tutti i dati" agisce solo sul dispositivo: ricollegando Dropbox i dati tornano;
+  - "Importa → Sostituisci" su un dispositivo sincronizzato: alla sync successiva tornano i record remoti più recenti;
+  - Dropbox vede nomi, dimensioni e date dei file (quali mesi hanno dati), mai il contenuto.
+
 ## Da verificare
 
 - **Su iPhone reale**, perché non testabile in Chromium headless:
@@ -129,6 +141,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
   - il selettore della data toccando il titolo;
   - l'installazione della PWA e l'archiviazione persistente.
 - **Licenza CREA**: verificata l'11 novembre 2026, non chiaramente compatibile (vedi Fase 2). Una conferma scritta del CREA la renderebbe utilizzabile.
+- **Sincronizzazione reale**: due dispositivi con lo stesso Dropbox vero. Su Safari iOS: salvataggio della `CryptoKey` in IndexedDB (se non riesce, l'app lo dice e chiede la passphrase a ogni apertura) e durata della derivazione PBKDF2 a 600.000 iterazioni.
 - **Peso dei modelli Tesseract** per lingua: da misurare.
 - **Open Food Facts**: limiti verificati nella documentazione l'11 novembre 2026: 15 richieste al minuto per IP sulle schede prodotto, 10 sulle ricerche; oltre i limiti globali risponde 503. Ricerca testuale solo con `/cgi/search.pl`. Richiede un User-Agent `NomeApp/Versione (email)`. Verificato in Chromium: `fetch` ignora un `User-Agent` personalizzato; l'app invia `X-User-Agent: MacroCaloriesTrack/<versione> (+<indirizzo dell'app>)`, accettato dal preflight CORS. Che OFF lo consideri equivalente non è documentato. Al posto dell'email c'è l'indirizzo dell'app, per non pubblicare un contatto personale. Comportamento su Safari iOS: da verificare.
 - **GitHub Actions**: aggiornate l'11 novembre 2026 a `checkout` v7.0.1, `setup-node` v7.1.0, `upload-pages-artifact` v5.0.0, `deploy-pages` v5.0.1, `upload-artifact` v7.0.2, fissate agli SHA. Primo run (11 novembre 2026): build e test unitari ok; `playwright install --with-deps` fallito dopo 10 minuti perché i mirror apt di Ubuntu non si risolvevano. Corretto: runner `ubuntu-24.04` esplicito, installazione senza `--with-deps` (le librerie ci sono già con Chrome preinstallato), timeout di 5 minuti sugli step di Playwright. Verificato col run di `7a718c2`: verde in 51 secondi, e2e compreso; il sito pubblicato serve solo `dist/`.

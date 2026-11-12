@@ -23,9 +23,11 @@ Dopo ogni modifica: `npm run build && npm test`. Dopo modifiche alla UI esegui a
   - `src/dates.ts`, `src/format.ts`, `src/nutrition.ts`, `src/search.ts`;
   - `src/crypto.ts`, `src/merge.ts`, `src/backup.ts`;
   - `src/catalog.ts` (banca dati svizzera), `src/off.ts` (Open Food Facts: URL, validazione, limiti);
-  - `src/dropbox.ts` (Dropbox: PKCE, URL, validazione delle risposte, classificazione degli errori).
+  - `src/dropbox.ts` (Dropbox: PKCE, URL, validazione delle risposte, classificazione degli errori);
+  - `src/sync.ts` (motore di sincronizzazione con adattatori: meta, cifratura dei file, merge, conflitti).
 - `src/sources.ts`: caricamento della banca dati e chiamate a Open Food Facts con cache in IndexedDB.
 - `src/dropboxClient.ts`: login con codice, token in IndexedDB (`kv`: `dropbox`, `dropbox-pending`), rinnovo, RPC, upload condizionato, download.
+- `src/syncService.ts`: adattatori IndexedDB e Dropbox per `sync.ts`, chiave (`kv`: `sync-key`) e stato (`sync-state`), sincronizzazione automatica. Le scritture della sync usano `putBatch(..., silent)` per non rilanciarla.
 - `src/db.ts`: IndexedDB nativo. `src/repo.ts`: operazioni di dominio.
 - `src/ui.ts`: helper `h()`, toast, fogli modali (`<dialog>`), controlli. `src/components.ts`: elementi condivisi.
 - `src/router.ts`: routing su hash. `src/nav.ts`: `refresh()` della vista corrente.

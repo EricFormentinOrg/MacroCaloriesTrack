@@ -291,7 +291,7 @@ a { color: var(--accent); }
 
 /* ---- Controlli */
 
-input[type="text"], input[type="search"], input[type="date"], select {
+input[type="text"], input[type="search"], input[type="date"], input[type="password"], select {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
@@ -413,6 +413,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .steps { margin: 4px 0 8px; padding-left: 22px; display: grid; gap: 6px; }
 .dropbox .form { width: 100%; }
 .dropbox > .btn { width: 100%; }
+.sync-line { font-weight: 500; }
 .stack .btn { width: 100%; }
 .version { margin-top: 36px; font-size: .8125rem; color: var(--ink-3); }
 
