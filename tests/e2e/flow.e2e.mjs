@@ -23,19 +23,34 @@ for (let i = 0; i < 50; i++) {
 }
 
 const problems = [];
+// E2E_TZ e E2E_LOCALE riproducono l'ambiente della CI (UTC, en-US) su un computer configurato diversamente.
+const envContext = {
+  ...(process.env.E2E_TZ ? { timezoneId: process.env.E2E_TZ } : {}),
+  ...(process.env.E2E_LOCALE ? { locale: process.env.E2E_LOCALE } : {}),
+};
 const browser = await chromium.launch();
 let failed = false;
 
 try {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, acceptDownloads: true });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, acceptDownloads: true, ...envContext });
   await ctx.addInitScript(() =>
     document.addEventListener('securitypolicyviolation', (e) => console.error('CSP-VIOLATION', e.violatedDirective, e.blockedURI)),
   );
   const page = await ctx.newPage();
+  // E2E_CPU_THROTTLE=4 rallenta la CPU come su un runner lento: utile per scovare gare tra test e app.
+  const throttle = Number(process.env.E2E_CPU_THROTTLE ?? 0);
+  if (throttle > 1) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: throttle });
   page.on('console', (m) => { if (m.type() === 'error') problems.push(m.text()); });
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true });
-  const toast = async () => { await page.waitForSelector('#toast.show'); return page.textContent('#toast'); };
+  // Aspetta il toast con il testo atteso: un toast precedente ancora visibile non deve passare per quello nuovo.
+  const toast = async (expected) => {
+    await page.waitForFunction((src) => {
+      const t = document.querySelector('#toast');
+      return !!t && t.classList.contains('show') && new RegExp(src).test(t.textContent ?? '');
+    }, expected.source, { timeout: 15000 });
+    return page.textContent('#toast');
+  };
   const today = await (async () => {
     await page.goto(BASE);
     return page.evaluate(() => {
@@ -70,7 +85,7 @@ try {
   assert.match(await page.textContent('.plan-target'), /2\.?207/);
   await shot('02-profilo');
   await page.click('text=Salva profilo');
-  assert.equal(await toast(), 'Profilo salvato');
+  await toast(/^Profilo salvato$/);
 
   // Alimenti
   const order = ['kcal', 'kj', 'fat', 'satFat', 'carbs', 'sugars', 'fiber', 'protein', 'salt'];
@@ -200,7 +215,7 @@ try {
   await page.waitForSelector('dialog.sheet[open]');
   assert.match(await page.textContent('dialog p'), /4 alimenti, 6 voci di diario, 1 pesata e il profilo/);
   await page.click('dialog button:has-text("Unisci")');
-  assert.match(await toast(), /Nessuna modifica/);
+  await toast(/Nessuna modifica/);
 
   // Cancella tutto e ripristina con "Sostituisci"
   await page.click('text=Cancella tutti i dati');
@@ -273,7 +288,7 @@ try {
   await page.waitForSelector('dialog.sheet[open]');
   assert.equal(await page.inputValue('dialog input[type=date]'), tomorrow);
   await page.click('dialog button:has-text("Copia")');
-  assert.match(await toast(), /Copiato su colazione di domani/);
+  await toast(/Copiato su colazione di domani/);
   await page.click('.meal:has(h2:text("Pranzo")) .meal-copy');
   await page.waitForSelector('dialog.sheet[open]');
   await page.click('dialog .seg-opt:has-text("Cena")');
@@ -291,7 +306,7 @@ try {
   await page.waitForSelector('dialog.sheet[open]');
   await page.click('dialog .chip:has-text("Ieri")');
   await page.click('dialog button:has-text("Copia")');
-  assert.match(await toast(), /Copiato su ieri/);
+  await toast(/Copiato su ieri/);
   await page.goto(`${BASE}#/diario/${yesterday}`);
   await page.waitForSelector('.diary');
   assert.equal(await page.locator('.meal .row').count(), 6);
