@@ -334,6 +334,27 @@ a { color: var(--accent); }
 .back { display: inline-block; padding: 8px 0; margin-bottom: 2px; text-decoration: none; font-weight: 500; }
 
 .search-row { display: grid; gap: 10px; margin-bottom: 8px; }
+.add-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.add-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 10px; }
+.add-actions .ico { width: 20px; height: 20px; }
+
+/* ---- Foto del piatto */
+.dish-preview { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 12px; margin-bottom: 12px; background: var(--track); }
+.dish-body { display: grid; gap: 10px; }
+.label-text.dish-hint { min-height: 0; }
+.dish-wait { color: var(--ink-2); padding: 18px 0; }
+.dish-items { margin-top: 0; }
+.dish-row { padding: 10px 12px 12px; display: grid; gap: 6px; }
+.dish-line { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dish-line .row-title { flex: 1; white-space: normal; }
+.dish-remove { width: 40px; height: 40px; font-size: 1.4rem; color: var(--ink-3); }
+.dish-qty-wrap { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.dish-row input.dish-qty { width: 84px; text-align: right; }
+.dish-source { flex: 1; min-width: 0; }
+.dish-src-label { font-size: .875rem; }
+.dish-conf { font-size: .8125rem; color: var(--ink-2); }
+.conf-bassa { color: var(--warn-ink); }
+.dish-total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding: 4px 2px; }
 .list-title { font-family: var(--sans); font-size: .875rem; font-weight: 600; color: var(--ink-2); margin: 20px 0 6px; }
 .results > .list:first-child { margin-top: 12px; }
 .empty { color: var(--ink-2); padding: 14px 2px; }
@@ -511,7 +532,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .howto { width: 100%; color: var(--ink-2); }
 .howto summary { cursor: pointer; padding: 10px 0; font-weight: 500; color: var(--accent); }
 .steps { margin: 4px 0 8px; padding-left: 22px; display: grid; gap: 6px; }
-.dropbox .form { width: 100%; }
+.dropbox .form, .gemini-set .form { width: 100%; }
 .dropbox > .btn { width: 100%; }
 .sync-line { font-weight: 500; }
 .stack .btn { width: 100%; }

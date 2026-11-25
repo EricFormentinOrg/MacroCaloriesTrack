@@ -139,8 +139,15 @@ function entry(o: unknown): Entry {
     qty: reqNum(o, 'qty', 0, 100000),
     per100: nutrients(o.per100),
     serving: entryServing(o.serving),
+    estimate: estimate(o.estimate),
     createdAt: reqNum(o, 'createdAt', 0, 1e15),
   });
+}
+
+function estimate(v: unknown): 'photo' | undefined {
+  if (v === undefined || v === null) return undefined;
+  need(v === 'photo', 'campo “estimate” non valido');
+  return 'photo';
 }
 
 function weight(o: unknown): Weight {

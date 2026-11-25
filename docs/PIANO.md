@@ -11,7 +11,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 | Tema | Decisione | Motivo |
 |---|---|---|
 | Utenti | Più utenti, ciascuno sui propri dispositivi e con il proprio Dropbox; ognuno crea la propria app Dropbox e ne inserisce l'App key nell'app | Nessun backend e nessuna dipendenza da un'app Dropbox condivisa: niente limite di 500 utenti né revisione Dropbox oltre i 50. Prezzo: configurazione più tecnica per l'utente. Decisa il 12 novembre 2026 (prima: solo Eric). |
-| Foto | Solo etichetta nutrizionale | La stima da foto del piatto richiede un modello vision e ha errori ampi sulle porzioni. |
+| Foto | Etichetta (testo con Testo live) e, dal 25 novembre 2026, foto del piatto stimata da Gemini con la chiave dell'utente | La stima da foto ha errori ampi su porzioni e condimenti: niente salvataggio automatico, sempre un foglio di revisione; i valori per 100 g vengono dalla banca dati quando c'è un alimento corrispondente. |
 | Motore foto | OCR locale (Tesseract.js), con correzione manuale sempre possibile | Gratuito e privato: l'immagine non lascia il dispositivo. |
 | Stack | TypeScript strict, nessuna dipendenza a runtime, IndexedDB nativo, DOM nativo | Superficie d'attacco minima. TypeScript è solo strumento di sviluppo. Sostituisce Vite, Preact e Dexie del piano iniziale. |
 | Fonte dei dati | IndexedDB sul dispositivo; Dropbox come replica cifrata | L'app funziona offline; Dropbox non vede mai dati in chiaro. |
@@ -98,7 +98,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - [x] e2e con due dispositivi su un Dropbox simulato condiviso: passphrase diverse rifiutate, dati cifrati (nessun nome in chiaro sui file), invio automatico, ricezione, scollegamento che revoca il token e dimentica la chiave.
 - [x] Domini aggiunti a `connect-src`: `https://api.dropboxapi.com`, `https://content.dropboxapi.com` (CORS verificato: entrambi accettano l'origine dell'app ed espongono `Dropbox-API-Result`).
 
-### Fase 4: etichetta via OCR (parziale)
+### Fase 4: etichetta e foto del piatto (parziale)
 - [x] Senza librerie: "Leggi dall'etichetta" nell'editor accetta il testo copiato con Testo live di iOS (o Google Lens) e compila i campi.
 - [ ] Foto o file, ritaglio manuale, pre-elaborazione (scala di grigi, contrasto, ingrandimento).
 - [ ] Tesseract.js self-hosted: worker, core WASM e modelli di lingua serviti da `public/`, caricati solo al primo uso. Lingue iniziali: italiano, inglese, tedesco, francese. In attesa dell'approvazione di Eric. Dati verificati il 12 novembre 2026: tesseract.js 7.0.0 e tesseract.js-core 6.1.2 (Apache-2.0); core SIMD-LSTM 2,87 MB di WASM; modelli LSTM `4.0.0_best_int` compressi: ita 1,66 MB, eng 2,95 MB, deu 1,33 MB, fra 0,71 MB (pacchetti `@tesseract.js-data/*` 1.0.0, MIT).
@@ -106,6 +106,13 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - [x] Controlli di plausibilità dell'editor applicati ai valori letti.
 - [x] Risultato precompilato nell'editor alimento, con i campi dubbi evidenziati e spiegati; correggere un campo toglie l'evidenza. Manca la foto accanto (arriva con l'OCR).
 - [ ] CSP: verificato in Chromium il 12 novembre 2026 che un worker caricato da un file dello stesso sito compila WebAssembly anche con la CSP attuale (la CSP in meta non si applica al worker; GitHub Pages non invia header CSP), mentre nel thread principale è bloccato e i worker `blob:` sono vietati da `worker-src 'self'`. Con `workerBlobURL: false` non servirebbe `'wasm-unsafe-eval'`. Da verificare su Safari iOS.
+
+- [x] Foto del piatto con Gemini (25 novembre 2026), decisa con Eric: chiave Gemini dell'utente in Impostazioni (IndexedDB, mai nel backup né su Dropbox), modello predefinito `gemini-3.8-flash`.
+  - Verificato: `generateContent` accetta chiamate dal browser dall'origine dell'app con `x-goog-api-key` (preflight CORS 200); l'endpoint `interactions` richiede l'header `Api-Revision`, che il preflight rifiuta (403). Chiave sempre nell'header, mai nell'URL. `connect-src` include `https://generativelanguage.googleapis.com`.
+  - Foto ridotta a 1280 px e ricodificata in JPEG sul dispositivo: niente EXIF, quindi niente posizione GPS. Non viene conservata.
+  - Risposta JSON con `responseJsonSchema`; se lo schema è rifiutato si riprova senza. Validazione rigorosa in `src/dishAi.ts` (puro, testato): voci non valide scartate e contate, testi ripuliti, valori entro limiti, controlli di coerenza.
+  - Foglio di revisione: quantità modificabili, voci eliminabili, valori della banca dati svizzera quando l'alimento generico indicato dal modello corrisponde (scelta modificabile), totale; "Aggiungi" in un'unica transazione, con annulla. Le voci hanno `estimate: 'photo'` (validato nel backup e nella sync) e nel diario riportano "stima da foto".
+  - Termini Google verificati: con chiave gratuita foto e risposte possono essere lette da revisori umani e usate per migliorare i prodotti; con fatturazione attiva no. Scritto nell'app.
 
 ### Fase 5: storico e portabilità (completata)
 - [x] Export JSON completo, con i tombstone.
@@ -138,6 +145,8 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
   - Dropbox vede nomi, dimensioni e date dei file (quali mesi hanno dati), mai il contenuto.
 
 ## Da verificare
+
+- **Foto del piatto con una chiave Gemini reale**: formato della richiesta e della risposta, qualità delle stime, tempi e costo per foto (il conteggio dei token di un'immagine non è verificato). Su Safari iOS: apertura della foto con l'orientamento corretto (c'è una seconda strada se `createImageBitmap` non basta).
 
 - **Su iPhone reale**, perché non testabile in Chromium headless:
   - il foglio della quantità sopra la tastiera (c'è una correzione basata su `visualViewport`);

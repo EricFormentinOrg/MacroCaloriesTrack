@@ -214,7 +214,7 @@ function entryRow(e: Entry): HTMLElement {
     h('button', { type: 'button', class: 'row', onClick: () => editEntry(e) },
       h('span', { class: 'row-main' },
         h('span', { class: 'row-title' }, e.name),
-        h('span', { class: 'row-sub' }, [e.brand, fmtQty(e)].filter(Boolean).join(', ')),
+        h('span', { class: 'row-sub' }, [e.brand, fmtQty(e), e.estimate === 'photo' ? 'stima da foto' : undefined].filter(Boolean).join(', ')),
       ),
       h('span', { class: 'row-side' },
         h('span', { class: 'row-kcal' }, `${fmtInt(n.kcal)} kcal`),

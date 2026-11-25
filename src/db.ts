@@ -30,6 +30,13 @@ export interface DropboxPending {
   at: number;
 }
 
+/** Chiave Gemini dell'utente per la foto del piatto: solo su questo dispositivo, mai nel backup o su Dropbox. */
+export interface GeminiSettings {
+  id: 'gemini';
+  apiKey: string;
+  model: string;
+}
+
 /** Chiave AES della sincronizzazione: CryptoKey non estraibile, mai la passphrase. */
 export interface SyncKeyRecord {
   id: 'sync-key';
@@ -56,7 +63,7 @@ export interface Stores {
   foods: Food;
   entries: Entry;
   weights: Weight;
-  kv: Profile | Meta | DropboxAuth | DropboxPending | SyncKeyRecord | SyncStateRecord;
+  kv: Profile | Meta | DropboxAuth | DropboxPending | SyncKeyRecord | SyncStateRecord | GeminiSettings;
   cache: CacheRecord;
 }
 

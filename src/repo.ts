@@ -103,23 +103,43 @@ export async function entriesFor(date: string): Promise<Entry[]> {
 }
 
 export async function addEntry(date: string, meal: Meal, food: Food, qty: number, serving?: EntryServing): Promise<Entry> {
-  const t = now();
-  const e: Entry = clean({
-    id: newId(),
-    createdAt: t,
-    updatedAt: t,
-    date,
-    meal,
-    foodId: food.id,
-    name: food.name,
-    brand: food.brand,
-    unit: food.unit,
-    qty,
-    per100: { ...food.per100 },
-    serving,
-  });
-  await db.put('entries', e);
+  const [e] = await addEntries([{ date, meal, foodId: food.id, name: food.name, brand: food.brand, unit: food.unit, qty, per100: food.per100, serving }]);
   return e;
+}
+
+export interface NewEntry {
+  date: string;
+  meal: Meal;
+  foodId: string;
+  name: string;
+  brand?: string;
+  unit: Unit;
+  qty: number;
+  per100: Nutrients;
+  serving?: EntryServing;
+  estimate?: 'photo';
+}
+
+/** Più voci in una sola transazione (es. tutte le voci di un piatto fotografato). */
+export async function addEntries(list: ReadonlyArray<NewEntry>): Promise<Entry[]> {
+  const t = now();
+  const entries = list.map((x, i): Entry => clean({
+    id: newId(),
+    createdAt: t + i,
+    updatedAt: t,
+    date: x.date,
+    meal: x.meal,
+    foodId: x.foodId,
+    name: x.name,
+    brand: x.brand,
+    unit: x.unit,
+    qty: x.qty,
+    per100: clean({ ...x.per100 }),
+    serving: x.serving,
+    estimate: x.estimate,
+  }));
+  await db.putBatch({ entries });
+  return entries;
 }
 
 export async function updateEntry(e: Entry, ch: { meal: Meal; qty: number; serving?: EntryServing }): Promise<void> {

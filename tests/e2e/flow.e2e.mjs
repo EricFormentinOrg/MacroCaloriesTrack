@@ -360,7 +360,12 @@ try {
     return route.fulfill({ status: 404, headers: cors, body: '' });
   });
   const p2 = await ctx2.newPage();
-  p2.on('console', (m) => { if (m.type() === 'error' && !/status of 503|blocked by CORS policy|net::ERR_FAILED/.test(m.text())) problems.push(`(fase 2) ${m.text()}`); });
+  p2.on('console', (m) => {
+    if (m.type() !== 'error' || /status of 503|blocked by CORS policy|net::ERR_FAILED/.test(m.text())) return;
+    // Il 400 di Gemini è voluto: simula lo schema rifiutato.
+    if (/status of 400/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://generativelanguage.googleapis.com/')) return;
+    problems.push(`(fase 2) ${m.text()}`);
+  });
   p2.on('pageerror', (e) => problems.push(`pageerror(fase 2): ${e.message}`));
   const qty = async (value) => {
     await p2.waitForSelector('dialog.sheet[open]');
@@ -459,6 +464,76 @@ try {
   await p2.screenshot({ path: `${SHOTS}/15-etichetta.png`, fullPage: true });
   await p2.fill('.nrow input >> nth=2', '0,4');
   assert.equal(await p2.locator('.nrow input.doubt').count(), 0, 'correggere il campo toglie l’evidenza');
+
+  // ---- Foto del piatto con Gemini (simulato): chiave dell'utente, revisione, conferma.
+  const gem = { calls: [] };
+  const KEY = 'AIzaSyTEST-chiave-di-prova-0123456789ab';
+  await ctx2.route('https://generativelanguage.googleapis.com/**', async (route) => {
+    const req = route.request();
+    const gcors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type,x-goog-api-key' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: gcors });
+    const body = JSON.parse(req.postData() ?? '{}');
+    gem.calls.push({ url: req.url(), key: req.headers()['x-goog-api-key'], body });
+    // Primo tentativo: schema rifiutato, come farebbe un'API che non conosce il campo.
+    if (gem.calls.length === 1) {
+      return route.fulfill({ status: 400, contentType: 'application/json', headers: gcors,
+        body: JSON.stringify({ error: { code: 400, message: 'Invalid JSON payload received. Unknown name "responseJsonSchema"', status: 'INVALID_ARGUMENT' } }) });
+    }
+    const dishJson = { items: [
+      { name: 'Mela', search: 'mela cruda', grams: 150, unit: 'g', confidence: 'alta', per100: { kcal: 50, fat: 0.2, carbs: 12, protein: 0.3 } },
+      { name: 'Piatto misto della casa', search: 'piatto misto della casa', grams: 300, unit: 'g', confidence: 'bassa', note: 'condimento non visibile',
+        per100: { kcal: 180, fat: 8, satFat: 2, carbs: 18, sugars: 2, fiber: 2, protein: 9, salt: 0.8 } },
+      { name: '', grams: 10, unit: 'g', per100: {} },
+    ], notes: 'Stima indicativa.' };
+    return route.fulfill({ status: 200, contentType: 'application/json', headers: gcors,
+      body: JSON.stringify({ candidates: [{ content: { role: 'model', parts: [{ text: JSON.stringify(dishJson) }] }, finishReason: 'STOP' }] }) });
+  });
+  await p2.goto(BASE + '#/impostazioni');
+  await p2.waitForSelector('.settings');
+  const gemSection = p2.locator('section:has(h2:text("Foto del piatto"))');
+  await gemSection.locator('input[type=password]').fill('corta');
+  await gemSection.locator('button:has-text("Salva la chiave")').click();
+  assert.match(await gemSection.locator('.form-error').textContent(), /non sembra valida/);
+  await gemSection.locator('input[type=password]').fill(KEY);
+  await gemSection.locator('button:has-text("Salva la chiave")').click();
+  await gemSection.locator(':text("…89ab")').waitFor();
+
+  await p2.goto(`${BASE}#/aggiungi/${today}/lunch`);
+  await p2.waitForSelector('.add');
+  const [chooser] = await Promise.all([p2.waitForEvent('filechooser'), p2.click('button:has-text("Foto del piatto")')]);
+  await chooser.setFiles('public/icons/icon-512.png');
+  await p2.waitForSelector('dialog.sheet[open] .dish-preview');
+  await p2.fill('dialog .dish-hint', 'mela e piatto del giorno');
+  await p2.click('dialog button:has-text("Analizza")');
+  await p2.waitForSelector('dialog .dish-row >> nth=1');
+  assert.equal(gem.calls.length, 2, 'schema rifiutato: secondo tentativo senza schema');
+  for (const c of gem.calls) {
+    assert.equal(c.key, KEY, 'chiave nell’header');
+    assert.doesNotMatch(c.url, /key=/, 'mai nell’URL');
+    assert.match(c.url, /\/v1beta\/models\/gemini-3\.8-flash:generateContent$/);
+    assert.equal(c.body.contents[0].parts[1].inline_data.mime_type, 'image/jpeg', 'foto ricodificata in JPEG');
+    assert.ok(c.body.contents[0].parts[1].inline_data.data.length > 1000);
+  }
+  assert.ok(gem.calls[0].body.generationConfig.responseJsonSchema);
+  assert.equal(gem.calls[1].body.generationConfig.responseJsonSchema, undefined);
+  assert.match(gem.calls[1].body.contents[0].parts[0].text, /mela e piatto del giorno/);
+  assert.equal(await p2.locator('dialog .dish-row').count(), 2, 'voce non valida scartata');
+  assert.match(await p2.textContent('dialog .dish-body'), /1 voce scartata/);
+  assert.equal(await p2.inputValue('dialog .dish-row >> nth=0 >> select'), 'db', 'mela: valori della banca dati');
+  assert.match(await p2.textContent('dialog .dish-row >> nth=0 >> select'), /Banca dati: Mela, cruda/);
+  assert.match(await p2.textContent('dialog .dish-row >> nth=1'), /Valori stimati da Gemini/);
+  await p2.fill('dialog .dish-row >> nth=1 >> .dish-qty', '200');
+  // Mela 150 g × 52 kcal (banca dati) = 78; piatto 200 g × 180 = 360 → 438
+  assert.match(await p2.textContent('dialog .dish-total'), /Totale 438 kcal/);
+  await p2.screenshot({ path: `${SHOTS}/19-foto-piatto.png`, fullPage: true });
+  await p2.click('dialog button:has-text("Aggiungi a Pranzo")');
+  await p2.waitForSelector('dialog.sheet', { state: 'detached' });
+  await p2.waitForSelector('.diary');
+  assert.match(await p2.textContent('#toast'), /Aggiunte 2 voci a Pranzo/);
+  const pranzo = p2.locator('.meal:has(h2:text("Pranzo")) .row');
+  assert.equal(await pranzo.count(), 2);
+  assert.equal(await p2.locator('.meal:has(h2:text("Pranzo")) .row-sub:has-text("stima da foto")').count(), 2);
+  assert.match(await p2.textContent('.meal:has(h2:text("Pranzo")) .meal-kcal'), /^438\s*kcal$/);
   await ctx2.close();
 
   // ---- Fase 3: Dropbox dell'utente (App key personale) e sincronizzazione cifrata tra due dispositivi.

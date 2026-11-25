@@ -8,6 +8,7 @@ import { clearOffCache, loadCatalog } from '../sources.js';
 import { confirmSheet, h, openSheet, toast } from '../ui.js';
 import { VERSION } from '../version.js';
 import { dropboxSection } from './dropboxSettings.js';
+import { geminiSection } from './geminiSettings.js';
 
 const isAppleMobile = (): boolean =>
   /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes('Macintosh') && navigator.maxTouchPoints > 1);
@@ -84,7 +85,7 @@ async function sourcesSection(): Promise<HTMLElement> {
 }
 
 export async function settingsView(): Promise<HTMLElement> {
-  const [statusText, sources, dropbox] = await Promise.all([storageStatus(), sourcesSection(), dropboxSection()]);
+  const [statusText, sources, dropbox, gemini] = await Promise.all([storageStatus(), sourcesSection(), dropboxSection(), geminiSection()]);
   const status = h('p', { class: 'muted' }, statusText);
 
   async function exportJSON(): Promise<void> {
@@ -181,6 +182,8 @@ export async function settingsView(): Promise<HTMLElement> {
     h('header', { class: 'view-head' }, h('h1', null, 'Impostazioni')),
 
     dropbox,
+
+    gemini,
 
     h('section', { class: 'section' },
       h('h2', null, 'Backup'),

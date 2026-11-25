@@ -59,6 +59,7 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 
 - La CSP permette solo risorse dello stesso sito: nessuno script o font esterno. L’unica eccezione sono le chiamate API a `https://world.openfoodfacts.org` (`connect-src`).
 - Le risposte di Open Food Facts vengono validate campo per campo, come i backup.
+- Chiave Gemini solo in IndexedDB e solo nell'header della richiesta; la risposta del modello è validata campo per campo.
 - Nessun `innerHTML` nel codice: testi e file importati non possono iniettare markup.
 - Il backup importato viene validato campo per campo; i campi sconosciuti vengono scartati.
 - Il CSV esportato neutralizza le formule (celle che iniziano con `=`, `+`, `-`, `@`).
@@ -68,6 +69,15 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 ## Valori dall'etichetta
 
 Nell'editor di un alimento, **Leggi dall'etichetta** compila i valori dal testo della tabella nutrizionale. Su iPhone: inquadra la tabella con la Fotocamera (o apri una foto), tieni premuto sul testo, **Seleziona tutto**, **Copia**, poi incolla nell'app. I campi incerti restano evidenziati finché non li controlli.
+
+## Foto del piatto
+
+In **Aggiungi**, **Foto del piatto** invia la foto a Google Gemini con la tua chiave e propone alimenti, grammi e valori. Controlli, correggi e confermi: niente viene salvato senza conferma, e le voci riportano "stima da foto".
+
+1. Crea una API key in Google AI Studio (https://aistudio.google.com) e limitala alla sola Gemini API.
+2. Incollala in **Impostazioni → Foto del piatto**. Resta solo sul dispositivo.
+
+La foto viene ridotta e ripulita dei metadati (anche la posizione) prima dell'invio e non viene conservata. Con una chiave gratuita Google può usare foto e risposte per migliorare i suoi prodotti e farle leggere a revisori umani; con la fatturazione attiva no. Le stime sono approssimative, soprattutto su quantità e condimenti.
 
 ## Collegare Dropbox
 

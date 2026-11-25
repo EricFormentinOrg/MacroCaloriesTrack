@@ -108,6 +108,8 @@ export interface Entry extends SyncRecord {
   qty: number;
   per100: Nutrients;
   serving?: EntryServing;
+  /** Valori e quantità stimati dalla foto del piatto (Gemini), confermati dall'utente. */
+  estimate?: 'photo';
   createdAt: number;
 }
 

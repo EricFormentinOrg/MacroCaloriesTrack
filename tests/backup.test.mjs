@@ -67,3 +67,12 @@ test('provenienza e preferiti: validati e conservati', () => {
     { ...food, favorite: 'sì' },
   ]) assert.equal(parseBackup(JSON.stringify(buildBackup({ ...data, foods: [bad] }))).ok, false, JSON.stringify(bad));
 });
+
+test('voci stimate da foto: campo validato e conservato', () => {
+  const est = { ...entry, id: 'e9', estimate: 'photo' };
+  const r = parseBackup(JSON.stringify(buildBackup({ ...data, entries: [entry, est] })));
+  assert.equal(r.ok, true);
+  assert.equal(r.data.entries[1].estimate, 'photo');
+  assert.equal('estimate' in r.data.entries[0], false);
+  assert.equal(parseBackup(JSON.stringify(buildBackup({ ...data, entries: [{ ...entry, estimate: 'ai' }] }))).ok, false);
+});
