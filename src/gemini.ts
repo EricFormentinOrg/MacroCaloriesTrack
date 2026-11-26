@@ -2,7 +2,7 @@
 import { toBase64 } from './crypto.js';
 import * as db from './db.js';
 import type { GeminiSettings } from './db.js';
-import { DEFAULT_MODEL, GeminiError, geminiError, isGeminiKey, isModelId, parseDish, requestBody, requestUrl, responseText } from './dishAi.js';
+import { DEFAULT_MODEL, GeminiError, geminiError, isGeminiKey, isModelId, normalizeGeminiKey, parseDish, requestBody, requestUrl, responseText } from './dishAi.js';
 import type { Dish } from './dishAi.js';
 
 export async function getGemini(): Promise<GeminiSettings | undefined> {
@@ -10,8 +10,12 @@ export async function getGemini(): Promise<GeminiSettings | undefined> {
 }
 
 export async function saveGemini(apiKey: string, model: string): Promise<void> {
-  const key = apiKey.trim();
-  if (!isGeminiKey(key)) throw new GeminiError('La chiave non sembra valida: copiala per intero da Google AI Studio.');
+  const key = normalizeGeminiKey(apiKey);
+  if (!isGeminiKey(key)) {
+    throw new GeminiError(key.length < 20
+      ? 'La chiave è troppo corta: copiala per intero da Google AI Studio.'
+      : 'La chiave contiene caratteri non validi: copiala di nuovo da Google AI Studio.');
+  }
   if (!isModelId(model)) throw new GeminiError('Modello non valido.');
   await db.put('kv', { id: 'gemini', apiKey: key, model });
 }

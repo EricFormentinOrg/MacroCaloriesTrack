@@ -493,7 +493,7 @@ try {
   const gemSection = p2.locator('section:has(h2:text("Foto del piatto"))');
   await gemSection.locator('input[type=password]').fill('corta');
   await gemSection.locator('button:has-text("Salva la chiave")').click();
-  assert.match(await gemSection.locator('.form-error').textContent(), /non sembra valida/);
+  assert.match(await gemSection.locator('.form-error').textContent(), /troppo corta/);
   await gemSection.locator('input[type=password]').fill(KEY);
   await gemSection.locator('button:has-text("Salva la chiave")').click();
   await gemSection.locator(':text("…89ab")').waitFor();

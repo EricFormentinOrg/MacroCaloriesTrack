@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCatalog } from '../dist/js/catalog.js';
-import { DEFAULT_MODEL, GeminiError, geminiError, isGeminiKey, matchCatalog, parseDish, prompt, requestBody, requestUrl, responseText, totalKcal } from '../dist/js/dishAi.js';
+import { DEFAULT_MODEL, GeminiError, geminiError, isGeminiKey, matchCatalog, normalizeGeminiKey, parseDish, prompt, requestBody, requestUrl, responseText, totalKcal } from '../dist/js/dishAi.js';
 
 const geminiResponse = (text, extra = {}) => ({ candidates: [{ content: { parts: [{ text }], role: 'model' }, finishReason: 'STOP' }], usageMetadata: {}, ...extra });
 const dish = {
@@ -27,8 +27,13 @@ test('richiesta: URL senza chiave, immagine inline, JSON con schema', () => {
   assert.equal(requestBody('QUJD', 'image/jpeg', '', false).generationConfig.responseJsonSchema, undefined);
   assert.doesNotMatch(prompt(''), /Indicazioni/);
   assert.equal(prompt('x'.repeat(1000)).length < 1400, true, 'indicazioni limitate');
-  assert.equal(isGeminiKey('AIzaSyA-abcdefghijklmnopqrstuvwxyz0123'), true);
+  assert.equal(isGeminiKey('AIzaSyA-abcdefghijklmnopqrstuvwxyz0123'), true, 'chiave standard');
+  assert.equal(isGeminiKey('AQ.Ab8RN6Lx9-fake_auth.key/with+other=chars_0123456789'), true, 'formato diverso: accettato, lo verifica Google');
+  assert.equal(isGeminiKey('x'.repeat(300)), true);
   assert.equal(isGeminiKey('corta'), false);
+  assert.equal(isGeminiKey('chiave con spazi 0123456789'), false);
+  assert.equal(isGeminiKey('chiave-accentata-èèèèèèèèèèèèèè'), false, 'un header HTTP non la accetterebbe');
+  assert.equal(normalizeGeminiKey(['  "AIzaSyA-abc', 'def"  '].join('\n')), 'AIzaSyA-abcdef', 'spazi, a capo e virgolette incollati per errore');
 });
 
 test('risposta: testo, rifiuti e troncamenti', () => {

@@ -112,6 +112,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
   - Foto ridotta a 1280 px e ricodificata in JPEG sul dispositivo: niente EXIF, quindi niente posizione GPS. Non viene conservata.
   - Risposta JSON con `responseJsonSchema`; se lo schema è rifiutato si riprova senza. Validazione rigorosa in `src/dishAi.ts` (puro, testato): voci non valide scartate e contate, testi ripuliti, valori entro limiti, controlli di coerenza.
   - Foglio di revisione: quantità modificabili, voci eliminabili, valori della banca dati svizzera quando l'alimento generico indicato dal modello corrisponde (scelta modificabile), totale; "Aggiungi" in un'unica transazione, con annulla. Le voci hanno `estimate: 'photo'` (validato nel backup e nella sync) e nel diario riportano "stima da foto".
+  - Formato della chiave non documentato da Google (le "auth keys" create in AI Studio dal 28/05/2026 sono diverse dalle vecchie "AIza…"). Il primo controllo, inventato da me su 30-64 caratteri alfanumerici, scartava chiavi valide: corretto il 26/11/2026, ora si accettano caratteri stampabili senza spazi (20-512) e la verifica la fa Google.
   - Termini Google verificati: con chiave gratuita foto e risposte possono essere lette da revisori umani e usate per migliorare i prodotti; con fatturazione attiva no. Scritto nell'app.
 
 ### Fase 5: storico e portabilità (completata)

@@ -21,7 +21,15 @@ export const MODELS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (più economico)' },
 ];
 
-export const isGeminiKey = (s: string): boolean => /^[A-Za-z0-9_-]{30,64}$/.test(s.trim());
+/**
+ * Formato delle chiavi non documentato (le "auth keys" create in AI Studio dal 28/05/2026 sono diverse
+ * dalle vecchie "AIza…"): solo caratteri stampabili senza spazi, che un header HTTP accetta.
+ * La verifica vera la fa Google alla prima richiesta.
+ */
+export const isGeminiKey = (s: string): boolean => /^[\x21-\x7e]{20,512}$/.test(s);
+
+/** Toglie spazi, a capo e virgolette incollati per errore insieme alla chiave. */
+export const normalizeGeminiKey = (s: string): string => s.replace(/\s+/g, '').replace(/^["'`]+|["'`]+$/g, '');
 export const isModelId = (s: string): boolean => /^gemini-[a-z0-9.-]{2,40}$/.test(s);
 
 const KEYS: ReadonlyArray<NutrientKey> = ['kcal', 'fat', 'satFat', 'carbs', 'sugars', 'fiber', 'protein', 'salt'];
