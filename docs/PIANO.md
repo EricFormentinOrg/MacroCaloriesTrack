@@ -114,6 +114,8 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
   - Foglio di revisione: quantità modificabili, voci eliminabili, valori della banca dati svizzera quando l'alimento generico indicato dal modello corrisponde (scelta modificabile), totale; "Aggiungi" in un'unica transazione, con annulla. Le voci hanno `estimate: 'photo'` (validato nel backup e nella sync) e nel diario riportano "stima da foto".
   - Formato della chiave non documentato da Google (le "auth keys" create in AI Studio dal 28/05/2026 sono diverse dalle vecchie "AIza…"). Il primo controllo, inventato da me su 30-64 caratteri alfanumerici, scartava chiavi valide: corretto il 26/11/2026, ora si accettano caratteri stampabili senza spazi (20-512) e la verifica la fa Google.
   - Termini Google verificati: con chiave gratuita foto e risposte possono essere lette da revisori umani e usate per migliorare i prodotti; con fatturazione attiva no. Scritto nell'app.
+  - Prova con la chiave reale di Eric (26/11/2026, Chromium, app in locale): chiave valida, CORS corretto, risposta con schema letta e validata. In quel momento `gemini-3.8-flash`, `3.7-flash`, `3.5-flash` e `3.1-flash-lite` rispondevano 503 "high demand"; la richiesta con la foto su 3.8 Flash è rimasta aperta oltre 6 minuti senza risposta. `gemini-3.5-flash-lite` rispondeva in 1,6 s. Su iPhone l'errore visto era "Connessione a Gemini non riuscita": dedotto, non verificato, che Safari chiuda la richiesta appesa prima dei 90 s di attesa dell'app.
+  - [x] Ripiego automatico (26/11/2026, deciso con Eric): con sovraccarico (503), altri errori 5xx, 429, 404, tempo scaduto o errore di rete l'app riprova una volta con `gemini-3.5-flash-lite` e lo scrive nel foglio di revisione. Nessun ripiego per chiave sbagliata, permessi (403) o offline. Attesa per tentativo ridotta da 90 a 50 s. Corretto anche un mio errore: il campo della chiave aveva `maxlength` 64 e avrebbe tagliato in silenzio chiavi più lunghe; ora 512 come la validazione.
 
 ### Fase 5: storico e portabilità (completata)
 - [x] Export JSON completo, con i tombstone.
@@ -147,7 +149,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 
 ## Da verificare
 
-- **Foto del piatto con una chiave Gemini reale**: formato della richiesta e della risposta, qualità delle stime, tempi e costo per foto (il conteggio dei token di un'immagine non è verificato). Su Safari iOS: apertura della foto con l'orientamento corretto (c'è una seconda strada se `createImageBitmap` non basta).
+- **Foto del piatto con una chiave Gemini reale**: formato della richiesta e della risposta verificati il 26/11/2026 (con Flash-Lite). Restano da verificare: qualità delle stime su piatti veri, tempi di 3.8 Flash quando non è sovraccarico (se superano 50 s il ripiego scatta senza motivo), costo per foto (il conteggio dei token di un'immagine non è verificato). Su Safari iOS: apertura della foto con l'orientamento corretto (c'è una seconda strada se `createImageBitmap` non basta) e il ripiego dopo una richiesta appesa.
 
 - **Su iPhone reale**, perché non testabile in Chromium headless:
   - il foglio della quantità sopra la tastiera (c'è una correzione basata su `visualViewport`);

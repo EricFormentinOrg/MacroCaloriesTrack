@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCatalog } from '../dist/js/catalog.js';
-import { DEFAULT_MODEL, GeminiError, geminiError, isGeminiKey, matchCatalog, normalizeGeminiKey, parseDish, prompt, requestBody, requestUrl, responseText, totalKcal } from '../dist/js/dishAi.js';
+import { DEFAULT_MODEL, FALLBACK_MODEL, GeminiError, fallbackFor, geminiError, isGeminiKey, matchCatalog, modelLabel, normalizeGeminiKey, parseDish, prompt, requestBody, requestUrl, responseText, totalKcal } from '../dist/js/dishAi.js';
 
 const geminiResponse = (text, extra = {}) => ({ candidates: [{ content: { parts: [{ text }], role: 'model' }, finishReason: 'STOP' }], usageMetadata: {}, ...extra });
 const dish = {
@@ -52,10 +52,32 @@ test('errori HTTP tradotti in istruzioni', () => {
   assert.match(geminiError(400, body('API key not valid. Please pass a valid API key.')).message, /chiave Gemini non è valida/);
   const schema = geminiError(400, body('Invalid JSON payload received. Unknown name "responseJsonSchema"'));
   assert.equal(schema.retryWithoutSchema, true, 'schema rifiutato: si riprova senza');
+  assert.equal(schema.tryOtherModel, false);
   assert.match(geminiError(429, '').message, /Limite/);
   assert.match(geminiError(403, '').message, /abilitala/);
   assert.match(geminiError(404, '').message, /Modello/);
-  assert.match(geminiError(503, '<html>').message, /non risponde/);
+  // Risposta vera del 26/11/2026 con i modelli Flash sovraccarichi.
+  const busy = JSON.stringify({ error: { code: 503, message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', status: 'UNAVAILABLE' } });
+  assert.match(geminiError(503, busy).message, /sovraccarico/);
+  assert.match(geminiError(503, '<html>').message, /sovraccarico/);
+  assert.match(geminiError(500, '').message, /non risponde/);
+});
+
+test('modello di riserva: solo per errori del servizio o del modello', () => {
+  const body = (message) => JSON.stringify({ error: { code: 400, message, status: 'INVALID_ARGUMENT' } });
+  assert.notEqual(FALLBACK_MODEL, DEFAULT_MODEL);
+  for (const status of [404, 429, 500, 503, 504]) {
+    assert.equal(fallbackFor(DEFAULT_MODEL, geminiError(status, '')), FALLBACK_MODEL, `stato ${status}`);
+  }
+  assert.equal(fallbackFor(DEFAULT_MODEL, new GeminiError('rete', { tryOtherModel: true })), FALLBACK_MODEL, 'rete o tempo scaduto');
+  assert.equal(fallbackFor(FALLBACK_MODEL, geminiError(503, '')), undefined, 'già sul modello di riserva');
+  assert.equal(fallbackFor(DEFAULT_MODEL, geminiError(400, body('API key not valid. Please pass a valid API key.'))), undefined, 'chiave sbagliata: nessun ripiego');
+  assert.equal(fallbackFor(DEFAULT_MODEL, geminiError(403, '')), undefined);
+  assert.equal(fallbackFor(DEFAULT_MODEL, new GeminiError('Sei offline')), undefined);
+  assert.equal(fallbackFor(DEFAULT_MODEL, new Error('x')), undefined);
+  assert.equal(modelLabel(DEFAULT_MODEL), 'Gemini 3.8 Flash');
+  assert.equal(modelLabel(FALLBACK_MODEL), 'Gemini 3.5 Flash-Lite');
+  assert.equal(modelLabel('gemini-9-pro'), 'gemini-9-pro');
 });
 
 test('piatto: validazione rigorosa e voci scartate', () => {

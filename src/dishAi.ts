@@ -16,10 +16,15 @@ import { tokens } from './search.js';
 
 export const GEMINI_ORIGIN = 'https://generativelanguage.googleapis.com';
 export const DEFAULT_MODEL = 'gemini-3.8-flash';
+/** Modello di riserva: il 26/11/2026 rispondeva mentre i Flash erano sovraccarichi (503). */
+export const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 export const MODELS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash (consigliato)' },
   { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite (più economico)' },
 ];
+
+/** Nome leggibile del modello, senza la nota tra parentesi. */
+export const modelLabel = (id: string): string => MODELS.find((m) => m.id === id)?.label.replace(/\s*\(.*\)$/, '') ?? id;
 
 /**
  * Formato delle chiavi non documentato (le "auth keys" create in AI Studio dal 28/05/2026 sono diverse
@@ -104,9 +109,20 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 export class GeminiError extends Error {
-  constructor(message: string, readonly retryWithoutSchema = false) {
+  /** Lo schema JSON non è accettato: si riprova lo stesso modello senza. */
+  readonly retryWithoutSchema: boolean;
+  /** Errore del servizio o del modello (sovraccarico, tempo scaduto, rete, limite): si può provare il modello di riserva. */
+  readonly tryOtherModel: boolean;
+  constructor(message: string, opts: { retryWithoutSchema?: boolean; tryOtherModel?: boolean } = {}) {
     super(message);
+    this.retryWithoutSchema = opts.retryWithoutSchema ?? false;
+    this.tryOtherModel = opts.tryOtherModel ?? false;
   }
+}
+
+/** Modello da provare dopo un errore del modello scelto, se ha senso. */
+export function fallbackFor(model: string, err: unknown): string | undefined {
+  return err instanceof GeminiError && err.tryOtherModel && model !== FALLBACK_MODEL ? FALLBACK_MODEL : undefined;
 }
 
 /** Messaggio per l'utente da uno stato HTTP e dal corpo dell'errore. */
@@ -119,11 +135,14 @@ export function geminiError(status: number, body: string): GeminiError {
     /* corpo non JSON */
   }
   if (/api key not valid|api_key_invalid/i.test(msg)) return new GeminiError('La chiave Gemini non è valida: controllala in Impostazioni.');
-  if (status === 400 && /schema|unknown name|invalid json payload/i.test(msg)) return new GeminiError(msg, true);
+  if (status === 400 && /schema|unknown name|invalid json payload/i.test(msg)) return new GeminiError(msg, { retryWithoutSchema: true });
   if (status === 403) return new GeminiError('La chiave Gemini non può usare questa API: in Google AI Studio abilitala per la Gemini API e controlla le restrizioni.');
-  if (status === 404) return new GeminiError('Modello Gemini non disponibile per questa chiave: scegline un altro in Impostazioni.');
-  if (status === 429) return new GeminiError('Limite di richieste Gemini raggiunto (sul piano gratuito è basso): riprova tra un minuto.');
-  if (status >= 500) return new GeminiError('Gemini non risponde: riprova più tardi.');
+  // I limiti del piano gratuito e la disponibilità valgono per modello: con un altro modello può andare.
+  const other = { tryOtherModel: true };
+  if (status === 404) return new GeminiError('Modello Gemini non disponibile per questa chiave: scegline un altro in Impostazioni.', other);
+  if (status === 429) return new GeminiError('Limite di richieste Gemini raggiunto (sul piano gratuito è basso): riprova tra un minuto.', other);
+  if (status === 503 || /high demand|overloaded/i.test(msg)) return new GeminiError('Gemini è sovraccarico in questo momento: riprova tra qualche minuto.', other);
+  if (status >= 500) return new GeminiError('Gemini non risponde: riprova più tardi.', other);
   return new GeminiError(`Richiesta a Gemini non riuscita (${status}${msg ? `: ${msg}` : ''}).`);
 }
 

@@ -2,11 +2,11 @@
 import { catalogFood } from '../catalog.js';
 import type { Catalog } from '../catalog.js';
 import { macroMini } from '../components.js';
-import { GeminiError, matchCatalog, totalKcal } from '../dishAi.js';
-import type { Dish, DishItem, Match } from '../dishAi.js';
+import { GeminiError, matchCatalog, modelLabel, totalKcal } from '../dishAi.js';
+import type { DishItem, Match } from '../dishAi.js';
 import { fmtInt, parseDecimal, toInput } from '../format.js';
 import { analyzeDish, getGemini, prepareImage } from '../gemini.js';
-import type { PreparedImage } from '../gemini.js';
+import type { DishResult, PreparedImage } from '../gemini.js';
 import { mealLabel } from '../model.js';
 import type { Entry, Meal, Nutrients } from '../model.js';
 import { scale, sum } from '../nutrition.js';
@@ -76,10 +76,13 @@ function build(close: (v?: Entry[]) => void, img: PreparedImage, preview: string
   }
 
   async function run(): Promise<void> {
-    body.replaceChildren(h('p', { class: 'dish-wait', role: 'status' }, 'Analisi del piatto in corso…'));
-    let dish: Dish;
+    const wait = h('p', { class: 'dish-wait', role: 'status' }, 'Analisi del piatto in corso…');
+    body.replaceChildren(wait);
+    let dish: DishResult;
     try {
-      dish = await analyzeDish(img, hint.value);
+      dish = await analyzeDish(img, hint.value, (from, to) => {
+        wait.textContent = `${modelLabel(from)} non è disponibile ora: provo con ${modelLabel(to)}…`;
+      });
     } catch (e) {
       if (!(e instanceof GeminiError)) console.warn(e);
       ready(e instanceof GeminiError ? e.message : 'Analisi non riuscita: riprova.');
@@ -93,7 +96,7 @@ function build(close: (v?: Entry[]) => void, img: PreparedImage, preview: string
     review(rows, dish);
   }
 
-  function review(rows: Row[], dish: Dish): void {
+  function review(rows: Row[], dish: DishResult): void {
     const list = h('ul', { class: 'list dish-items' });
     const total = h('div', { class: 'dish-total' });
     const add: HTMLButtonElement = h('button', { type: 'button', class: 'btn btn-primary', onClick: () => void confirm() }, `Aggiungi a ${mealLabel(meal)}`);
@@ -174,6 +177,9 @@ function build(close: (v?: Entry[]) => void, img: PreparedImage, preview: string
       rows.length
         ? h('p', { class: 'muted' }, 'Controlla alimenti e quantità: sono stime. Puoi correggere i grammi, togliere voci e scegliere i valori della banca dati quando c’è un alimento corrispondente.')
         : h('p', { class: 'form-error' }, 'Gemini non ha riconosciuto alimenti in questa foto.'),
+      ...(dish.fallbackFrom
+        ? [h('p', { class: 'muted dish-fallback' }, `Stima fatta con ${modelLabel(dish.model)}: ${modelLabel(dish.fallbackFrom)} non era disponibile.`)]
+        : []),
       ...(dish.notes ? [h('p', { class: 'muted' }, `Nota di Gemini: ${dish.notes}`)] : []),
       ...(dish.dropped ? [h('p', { class: 'warn' }, dish.dropped === 1 ? '1 voce scartata perché non valida.' : `${dish.dropped} voci scartate perché non valide.`)] : []),
       list,

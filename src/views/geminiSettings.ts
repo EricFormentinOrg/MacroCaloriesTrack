@@ -1,5 +1,5 @@
 // Impostazioni → Foto del piatto: chiave Gemini dell'utente, modello, note sulla privacy.
-import { GeminiError, MODELS } from '../dishAi.js';
+import { FALLBACK_MODEL, GeminiError, MODELS, modelLabel } from '../dishAi.js';
 import { DEFAULT_MODEL, clearGemini, getGemini, saveGemini, setGeminiModel } from '../gemini.js';
 import { confirmSheet, field, h, toast } from '../ui.js';
 
@@ -12,6 +12,9 @@ function modelSelect(current: string, onChange: (v: string) => void): HTMLSelect
     known ? null : h('option', { value: current }, current),
   );
 }
+
+const fallbackNote = (): HTMLElement =>
+  h('p', { class: 'muted' }, `Se il modello scelto è sovraccarico o non risponde, l’app riprova da sola con ${modelLabel(FALLBACK_MODEL)}.`);
 
 function privacy(): HTMLElement {
   return h('details', { class: 'howto' },
@@ -39,6 +42,7 @@ export async function geminiSection(): Promise<HTMLElement> {
           await setGeminiModel(v);
           toast('Modello aggiornato');
         })),
+        fallbackNote(),
         privacy(),
         h('button', {
           type: 'button',
@@ -58,7 +62,8 @@ export async function geminiSection(): Promise<HTMLElement> {
         }, 'Elimina la chiave'),
       );
     } else {
-      const key = h('input', { type: 'password', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', maxlength: 64 });
+      // Stesso limite di isGeminiKey: un maxlength più corto taglierebbe la chiave in silenzio.
+      const key = h('input', { type: 'password', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', maxlength: 512 });
       let model = DEFAULT_MODEL;
       const save: HTMLButtonElement = h('button', { type: 'submit', class: 'btn btn-primary' }, 'Salva la chiave');
       blocks.push(
@@ -94,6 +99,7 @@ export async function geminiSection(): Promise<HTMLElement> {
         },
           field('Chiave Gemini', key),
           field('Modello', modelSelect(model, (v) => { model = v; })),
+          fallbackNote(),
           save,
         ),
       );

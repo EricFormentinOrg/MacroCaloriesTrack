@@ -479,6 +479,11 @@ try {
       return route.fulfill({ status: 400, contentType: 'application/json', headers: gcors,
         body: JSON.stringify({ error: { code: 400, message: 'Invalid JSON payload received. Unknown name "responseJsonSchema"', status: 'INVALID_ARGUMENT' } }) });
     }
+    // Poi il modello scelto è sovraccarico (risposta vera del 26/11/2026): l'app passa al modello di riserva.
+    if (/gemini-3\.8-flash:/.test(req.url())) {
+      return route.fulfill({ status: 503, contentType: 'application/json', headers: gcors,
+        body: JSON.stringify({ error: { code: 503, message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', status: 'UNAVAILABLE' } }) });
+    }
     const dishJson = { items: [
       { name: 'Mela', search: 'mela cruda', grams: 150, unit: 'g', confidence: 'alta', per100: { kcal: 50, fat: 0.2, carbs: 12, protein: 0.3 } },
       { name: 'Piatto misto della casa', search: 'piatto misto della casa', grams: 300, unit: 'g', confidence: 'bassa', note: 'condimento non visibile',
@@ -497,6 +502,7 @@ try {
   await gemSection.locator('input[type=password]').fill(KEY);
   await gemSection.locator('button:has-text("Salva la chiave")').click();
   await gemSection.locator(':text("…89ab")').waitFor();
+  assert.match(await gemSection.textContent(), /riprova da sola con Gemini 3\.5 Flash-Lite/);
 
   await p2.goto(`${BASE}#/aggiungi/${today}/lunch`);
   await p2.waitForSelector('.add');
@@ -506,17 +512,21 @@ try {
   await p2.fill('dialog .dish-hint', 'mela e piatto del giorno');
   await p2.click('dialog button:has-text("Analizza")');
   await p2.waitForSelector('dialog .dish-row >> nth=1');
-  assert.equal(gem.calls.length, 2, 'schema rifiutato: secondo tentativo senza schema');
+  assert.equal(gem.calls.length, 3, 'schema rifiutato, poi sovraccarico, poi modello di riserva');
   for (const c of gem.calls) {
     assert.equal(c.key, KEY, 'chiave nell’header');
     assert.doesNotMatch(c.url, /key=/, 'mai nell’URL');
-    assert.match(c.url, /\/v1beta\/models\/gemini-3\.8-flash:generateContent$/);
     assert.equal(c.body.contents[0].parts[1].inline_data.mime_type, 'image/jpeg', 'foto ricodificata in JPEG');
     assert.ok(c.body.contents[0].parts[1].inline_data.data.length > 1000);
+    assert.match(c.body.contents[0].parts[0].text, /mela e piatto del giorno/);
   }
+  assert.match(gem.calls[0].url, /\/v1beta\/models\/gemini-3\.8-flash:generateContent$/);
+  assert.match(gem.calls[1].url, /\/v1beta\/models\/gemini-3\.8-flash:generateContent$/);
+  assert.match(gem.calls[2].url, /\/v1beta\/models\/gemini-3\.5-flash-lite:generateContent$/);
   assert.ok(gem.calls[0].body.generationConfig.responseJsonSchema);
   assert.equal(gem.calls[1].body.generationConfig.responseJsonSchema, undefined);
-  assert.match(gem.calls[1].body.contents[0].parts[0].text, /mela e piatto del giorno/);
+  assert.ok(gem.calls[2].body.generationConfig.responseJsonSchema, 'il modello di riserva riparte con lo schema');
+  assert.match(await p2.textContent('dialog .dish-fallback'), /Stima fatta con Gemini 3\.5 Flash-Lite: Gemini 3\.8 Flash non era disponibile/);
   assert.equal(await p2.locator('dialog .dish-row').count(), 2, 'voce non valida scartata');
   assert.match(await p2.textContent('dialog .dish-body'), /1 voce scartata/);
   assert.equal(await p2.inputValue('dialog .dish-row >> nth=0 >> select'), 'db', 'mela: valori della banca dati');

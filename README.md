@@ -77,6 +77,8 @@ In **Aggiungi**, **Foto del piatto** invia la foto a Google Gemini con la tua ch
 1. Crea una API key in Google AI Studio (https://aistudio.google.com) e limitala alla sola Gemini API.
 2. Incollala in **Impostazioni → Foto del piatto**. Resta solo sul dispositivo.
 
+Se il modello scelto è sovraccarico o non risponde entro 50 secondi, l'app riprova una volta con Gemini 3.5 Flash-Lite e lo indica nella revisione.
+
 La foto viene ridotta e ripulita dei metadati (anche la posizione) prima dell'invio e non viene conservata. Con una chiave gratuita Google può usare foto e risposte per migliorare i suoi prodotti e farle leggere a revisori umani; con la fatturazione attiva no. Le stime sono approssimative, soprattutto su quantità e condimenti.
 
 ## Collegare Dropbox
