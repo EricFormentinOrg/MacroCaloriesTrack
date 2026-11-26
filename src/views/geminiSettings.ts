@@ -62,12 +62,12 @@ export async function geminiSection(): Promise<HTMLElement> {
         }, 'Elimina la chiave'),
       );
     } else {
-      // Stesso limite di isGeminiKey: un maxlength più corto taglierebbe la chiave in silenzio.
+      // Stesso limite di isApiKey: un maxlength più corto taglierebbe la chiave in silenzio.
       const key = h('input', { type: 'password', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', maxlength: 512 });
       let model = DEFAULT_MODEL;
       const save: HTMLButtonElement = h('button', { type: 'submit', class: 'btn btn-primary' }, 'Salva la chiave');
       blocks.push(
-        h('p', null, 'Fotografa il piatto e Gemini stima alimenti, quantità e valori: tu controlli e aggiungi al diario. Serve una tua chiave Gemini.'),
+        h('p', null, 'Fotografa il piatto e Gemini stima alimenti, quantità e valori: tu controlli e aggiungi al diario. Serve una tua chiave Gemini, oppure una chiave OpenRouter (sezione qui sotto).'),
         h('details', { class: 'howto' },
           h('summary', null, 'Come creare la chiave'),
           h('ol', { class: 'steps' },

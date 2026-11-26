@@ -1,8 +1,9 @@
 // Client Gemini per la foto del piatto: impostazioni in IndexedDB, preparazione dell'immagine, chiamata.
+import { postAi, readJson } from './aiHttp.js';
 import { toBase64 } from './crypto.js';
 import * as db from './db.js';
 import type { GeminiSettings } from './db.js';
-import { DEFAULT_MODEL, GeminiError, fallbackFor, geminiError, isGeminiKey, isModelId, normalizeGeminiKey, parseDish, requestBody, requestUrl, responseText } from './dishAi.js';
+import { DEFAULT_MODEL, GeminiError, geminiError, isApiKey, isModelId, normalizeApiKey, parseDish, requestBody, requestUrl, responseText } from './dishAi.js';
 import type { Dish } from './dishAi.js';
 
 export async function getGemini(): Promise<GeminiSettings | undefined> {
@@ -10,8 +11,8 @@ export async function getGemini(): Promise<GeminiSettings | undefined> {
 }
 
 export async function saveGemini(apiKey: string, model: string): Promise<void> {
-  const key = normalizeGeminiKey(apiKey);
-  if (!isGeminiKey(key)) {
+  const key = normalizeApiKey(apiKey);
+  if (!isApiKey(key)) {
     throw new GeminiError(key.length < 20
       ? 'La chiave è troppo corta: copiala per intero da Google AI Studio.'
       : 'La chiave contiene caratteri non validi: copiala di nuovo da Google AI Studio.');
@@ -75,39 +76,13 @@ export async function prepareImage(file: Blob): Promise<PreparedImage> {
   return { blob, base64: toBase64(new Uint8Array(await blob.arrayBuffer())), mimeType: 'image/jpeg' };
 }
 
-/**
- * Attesa massima per tentativo. Con il servizio sovraccarico Google può tenere aperta la richiesta
- * per minuti senza rispondere (visto il 26/11/2026): meglio passare presto al modello di riserva.
- */
-const TIMEOUT_MS = 50_000;
-
-async function call(apiKey: string, model: string, img: PreparedImage, hint: string, withSchema: boolean): Promise<Response> {
-  if (!navigator.onLine) throw new GeminiError('Sei offline: la stima da foto richiede la connessione.');
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
-  try {
-    return await fetch(requestUrl(model), {
-      method: 'POST',
-      // La chiave va nell'header, mai nell'URL: non finisce in cronologia o log di rete.
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify(requestBody(img.base64, img.mimeType, hint, withSchema)),
-      credentials: 'omit',
-      referrerPolicy: 'no-referrer',
-      cache: 'no-store',
-      signal: ctl.signal,
-    });
-  } catch {
-    // Su iPhone anche una richiesta rimasta appesa a lungo finisce qui, come errore di rete.
-    throw new GeminiError(
-      ctl.signal.aborted ? 'Gemini non ha risposto in tempo: riprova tra qualche minuto.' : 'Connessione a Gemini non riuscita: controlla la rete e riprova.',
-      { tryOtherModel: true },
-    );
-  } finally {
-    clearTimeout(timer);
-  }
+function call(apiKey: string, model: string, img: PreparedImage, hint: string, withSchema: boolean): Promise<Response> {
+  // La chiave va nell'header, mai nell'URL: non finisce in cronologia o log di rete.
+  return postAi(requestUrl(model), { 'x-goog-api-key': apiKey }, requestBody(img.base64, img.mimeType, hint, withSchema), 'Gemini');
 }
 
-async function attempt(apiKey: string, model: string, img: PreparedImage, hint: string): Promise<Dish> {
+/** Un tentativo con un modello Gemini: voci stimate e già validate, o un GeminiError. */
+export async function geminiAttempt(apiKey: string, model: string, img: PreparedImage, hint: string): Promise<Dish> {
   let res = await call(apiKey, model, img, hint, true);
   if (!res.ok) {
     const err = geminiError(res.status, await res.text().catch(() => ''));
@@ -116,44 +91,7 @@ async function attempt(apiKey: string, model: string, img: PreparedImage, hint: 
     res = await call(apiKey, model, img, hint, false);
     if (!res.ok) throw geminiError(res.status, await res.text().catch(() => ''));
   }
-  let json: unknown;
-  try {
-    json = await res.json();
-  } catch {
-    throw new GeminiError('Risposta di Gemini non valida.');
-  }
-  return parseDish(responseText(json));
-}
-
-export interface DishResult extends Dish {
-  /** Modello che ha prodotto la stima. */
-  model: string;
-  /** Presente se il modello scelto non era disponibile e ha risposto quello di riserva. */
-  fallbackFrom?: string;
-}
-
-/**
- * Invia la foto e restituisce le voci stimate, già validate. Se il modello scelto è sovraccarico,
- * non risponde o ha esaurito il limite, riprova una volta con il modello di riserva.
- */
-export async function analyzeDish(img: PreparedImage, hint: string, onFallback?: (from: string, to: string) => void): Promise<DishResult> {
-  const s = await getGemini();
-  if (!s) throw new GeminiError('Inserisci prima la chiave Gemini in Impostazioni.');
-  try {
-    return { ...(await attempt(s.apiKey, s.model, img, hint)), model: s.model };
-  } catch (e) {
-    const alt = fallbackFor(s.model, e);
-    if (!alt) throw e;
-    onFallback?.(s.model, alt);
-    try {
-      return { ...(await attempt(s.apiKey, alt, img, hint)), model: alt, fallbackFrom: s.model };
-    } catch (e2) {
-      if (e2 instanceof GeminiError && e2.tryOtherModel) {
-        throw new GeminiError('Gemini non è disponibile in questo momento, nemmeno con il modello di riserva: riprova tra qualche minuto.');
-      }
-      throw e2;
-    }
-  }
+  return parseDish(responseText(await readJson(res, 'Gemini')));
 }
 
 export { DEFAULT_MODEL };

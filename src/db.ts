@@ -37,6 +37,13 @@ export interface GeminiSettings {
   model: string;
 }
 
+/** Chiave OpenRouter dell'utente (riserva di Gemini o alternativa): come quella Gemini, solo su questo dispositivo. */
+export interface OpenRouterSettings {
+  id: 'openrouter';
+  apiKey: string;
+  model: string;
+}
+
 /** Chiave AES della sincronizzazione: CryptoKey non estraibile, mai la passphrase. */
 export interface SyncKeyRecord {
   id: 'sync-key';
@@ -63,7 +70,7 @@ export interface Stores {
   foods: Food;
   entries: Entry;
   weights: Weight;
-  kv: Profile | Meta | DropboxAuth | DropboxPending | SyncKeyRecord | SyncStateRecord | GeminiSettings;
+  kv: Profile | Meta | DropboxAuth | DropboxPending | SyncKeyRecord | SyncStateRecord | GeminiSettings | OpenRouterSettings;
   cache: CacheRecord;
 }
 

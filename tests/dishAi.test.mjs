@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCatalog } from '../dist/js/catalog.js';
-import { DEFAULT_MODEL, FALLBACK_MODEL, GeminiError, fallbackFor, geminiError, isGeminiKey, matchCatalog, modelLabel, normalizeGeminiKey, parseDish, prompt, requestBody, requestUrl, responseText, totalKcal } from '../dist/js/dishAi.js';
+import { DEFAULT_MODEL, FALLBACK_MODEL, GeminiError, canTryNext, dishPlan, geminiError, isApiKey, matchCatalog, modelLabel, normalizeApiKey, parseDish, prompt, requestBody, requestUrl, responseText, totalKcal } from '../dist/js/dishAi.js';
 
 const geminiResponse = (text, extra = {}) => ({ candidates: [{ content: { parts: [{ text }], role: 'model' }, finishReason: 'STOP' }], usageMetadata: {}, ...extra });
 const dish = {
@@ -27,13 +27,13 @@ test('richiesta: URL senza chiave, immagine inline, JSON con schema', () => {
   assert.equal(requestBody('QUJD', 'image/jpeg', '', false).generationConfig.responseJsonSchema, undefined);
   assert.doesNotMatch(prompt(''), /Indicazioni/);
   assert.equal(prompt('x'.repeat(1000)).length < 1400, true, 'indicazioni limitate');
-  assert.equal(isGeminiKey('AIzaSyA-abcdefghijklmnopqrstuvwxyz0123'), true, 'chiave standard');
-  assert.equal(isGeminiKey('AQ.Ab8RN6Lx9-fake_auth.key/with+other=chars_0123456789'), true, 'formato diverso: accettato, lo verifica Google');
-  assert.equal(isGeminiKey('x'.repeat(300)), true);
-  assert.equal(isGeminiKey('corta'), false);
-  assert.equal(isGeminiKey('chiave con spazi 0123456789'), false);
-  assert.equal(isGeminiKey('chiave-accentata-èèèèèèèèèèèèèè'), false, 'un header HTTP non la accetterebbe');
-  assert.equal(normalizeGeminiKey(['  "AIzaSyA-abc', 'def"  '].join('\n')), 'AIzaSyA-abcdef', 'spazi, a capo e virgolette incollati per errore');
+  assert.equal(isApiKey('AIzaSyA-abcdefghijklmnopqrstuvwxyz0123'), true, 'chiave standard');
+  assert.equal(isApiKey('AQ.Ab8RN6Lx9-fake_auth.key/with+other=chars_0123456789'), true, 'formato diverso: accettato, lo verifica Google');
+  assert.equal(isApiKey('x'.repeat(300)), true);
+  assert.equal(isApiKey('corta'), false);
+  assert.equal(isApiKey('chiave con spazi 0123456789'), false);
+  assert.equal(isApiKey('chiave-accentata-èèèèèèèèèèèèèè'), false, 'un header HTTP non la accetterebbe');
+  assert.equal(normalizeApiKey(['  "AIzaSyA-abc', 'def"  '].join('\n')), 'AIzaSyA-abcdef', 'spazi, a capo e virgolette incollati per errore');
 });
 
 test('risposta: testo, rifiuti e troncamenti', () => {
@@ -63,18 +63,22 @@ test('errori HTTP tradotti in istruzioni', () => {
   assert.match(geminiError(500, '').message, /non risponde/);
 });
 
-test('modello di riserva: solo per errori del servizio o del modello', () => {
+test('tentativi: ordine e passaggio al successivo solo per errori del servizio o del modello', () => {
   const body = (message) => JSON.stringify({ error: { code: 400, message, status: 'INVALID_ARGUMENT' } });
   assert.notEqual(FALLBACK_MODEL, DEFAULT_MODEL);
-  for (const status of [404, 429, 500, 503, 504]) {
-    assert.equal(fallbackFor(DEFAULT_MODEL, geminiError(status, '')), FALLBACK_MODEL, `stato ${status}`);
-  }
-  assert.equal(fallbackFor(DEFAULT_MODEL, new GeminiError('rete', { tryOtherModel: true })), FALLBACK_MODEL, 'rete o tempo scaduto');
-  assert.equal(fallbackFor(FALLBACK_MODEL, geminiError(503, '')), undefined, 'già sul modello di riserva');
-  assert.equal(fallbackFor(DEFAULT_MODEL, geminiError(400, body('API key not valid. Please pass a valid API key.'))), undefined, 'chiave sbagliata: nessun ripiego');
-  assert.equal(fallbackFor(DEFAULT_MODEL, geminiError(403, '')), undefined);
-  assert.equal(fallbackFor(DEFAULT_MODEL, new GeminiError('Sei offline')), undefined);
-  assert.equal(fallbackFor(DEFAULT_MODEL, new Error('x')), undefined);
+  const g = (model) => ({ provider: 'gemini', model });
+  const or = { provider: 'openrouter', model: 'openrouter/free' };
+  assert.deepEqual(dishPlan(DEFAULT_MODEL), [g(DEFAULT_MODEL), g(FALLBACK_MODEL)]);
+  assert.deepEqual(dishPlan(FALLBACK_MODEL), [g(FALLBACK_MODEL)], 'già sul modello di riserva');
+  assert.deepEqual(dishPlan(DEFAULT_MODEL, 'openrouter/free'), [g(DEFAULT_MODEL), g(FALLBACK_MODEL), or]);
+  assert.deepEqual(dishPlan(undefined, 'openrouter/free'), [or], 'solo OpenRouter');
+  assert.deepEqual(dishPlan(), []);
+  for (const status of [404, 429, 500, 503, 504]) assert.equal(canTryNext(geminiError(status, '')), true, `stato ${status}`);
+  assert.equal(canTryNext(new GeminiError('rete', { tryOtherModel: true })), true, 'rete o tempo scaduto');
+  assert.equal(canTryNext(geminiError(400, body('API key not valid. Please pass a valid API key.'))), false, 'chiave sbagliata: nessun ripiego');
+  assert.equal(canTryNext(geminiError(403, '')), false);
+  assert.equal(canTryNext(new GeminiError('Sei offline')), false);
+  assert.equal(canTryNext(new Error('x')), false);
   assert.equal(modelLabel(DEFAULT_MODEL), 'Gemini 3.8 Flash');
   assert.equal(modelLabel(FALLBACK_MODEL), 'Gemini 3.5 Flash-Lite');
   assert.equal(modelLabel('gemini-9-pro'), 'gemini-9-pro');

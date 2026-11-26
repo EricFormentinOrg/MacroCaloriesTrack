@@ -57,9 +57,9 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 
 ## Sicurezza
 
-- La CSP permette solo risorse dello stesso sito: nessuno script o font esterno. L’unica eccezione sono le chiamate API a `https://world.openfoodfacts.org` (`connect-src`).
+- La CSP permette solo risorse dello stesso sito: nessuno script o font esterno. Uniche eccezioni, in `connect-src`, le chiamate API a Open Food Facts, Dropbox (`api.dropboxapi.com`, `content.dropboxapi.com`), Gemini (`generativelanguage.googleapis.com`) e OpenRouter (`openrouter.ai`).
 - Le risposte di Open Food Facts vengono validate campo per campo, come i backup.
-- Chiave Gemini solo in IndexedDB e solo nell'header della richiesta; la risposta del modello è validata campo per campo.
+- Chiavi Gemini e OpenRouter solo in IndexedDB e solo negli header della richiesta; le risposte dei modelli sono validate campo per campo.
 - Nessun `innerHTML` nel codice: testi e file importati non possono iniettare markup.
 - Il backup importato viene validato campo per campo; i campi sconosciuti vengono scartati.
 - Il CSV esportato neutralizza le formule (celle che iniziano con `=`, `+`, `-`, `@`).
@@ -78,6 +78,8 @@ In **Aggiungi**, **Foto del piatto** invia la foto a Google Gemini con la tua ch
 2. Incollala in **Impostazioni → Foto del piatto**. Resta solo sul dispositivo.
 
 Se il modello scelto è sovraccarico o non risponde entro 50 secondi, l'app riprova una volta con Gemini 3.5 Flash-Lite e lo indica nella revisione.
+
+**OpenRouter come riserva.** In **Impostazioni → OpenRouter** puoi aggiungere una chiave OpenRouter (https://openrouter.ai): se anche Flash-Lite non risponde, la foto va a OpenRouter. Senza chiave Gemini, OpenRouter viene usato da solo. Il modello predefinito è il router dei modelli gratuiti (`openrouter/free`): nessun costo, al massimo 20 richieste al minuto e 50 al giorno (1000 con almeno 10 crediti acquistati). In alternativa, a pagamento con il credito OpenRouter: Claude Haiku 5.5, GPT-6 Luna, Claude Sonnet 5.5. OpenRouter non conserva i contenuti salvo log attivato nel tuo account; nelle sue impostazioni privacy puoi escludere i fornitori che addestrano sui dati.
 
 La foto viene ridotta e ripulita dei metadati (anche la posizione) prima dell'invio e non viene conservata. Con una chiave gratuita Google può usare foto e risposte per migliorare i suoi prodotti e farle leggere a revisori umani; con la fatturazione attiva no. Le stime sono approssimative, soprattutto su quantità e condimenti.
 

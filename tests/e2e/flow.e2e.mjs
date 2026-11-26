@@ -474,16 +474,16 @@ try {
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: gcors });
     const body = JSON.parse(req.postData() ?? '{}');
     gem.calls.push({ url: req.url(), key: req.headers()['x-goog-api-key'], body });
+    const busy = () => route.fulfill({ status: 503, contentType: 'application/json', headers: gcors,
+      body: JSON.stringify({ error: { code: 503, message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', status: 'UNAVAILABLE' } }) });
+    if (gem.down) return busy();
     // Primo tentativo: schema rifiutato, come farebbe un'API che non conosce il campo.
     if (gem.calls.length === 1) {
       return route.fulfill({ status: 400, contentType: 'application/json', headers: gcors,
         body: JSON.stringify({ error: { code: 400, message: 'Invalid JSON payload received. Unknown name "responseJsonSchema"', status: 'INVALID_ARGUMENT' } }) });
     }
     // Poi il modello scelto è sovraccarico (risposta vera del 26/11/2026): l'app passa al modello di riserva.
-    if (/gemini-3\.8-flash:/.test(req.url())) {
-      return route.fulfill({ status: 503, contentType: 'application/json', headers: gcors,
-        body: JSON.stringify({ error: { code: 503, message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', status: 'UNAVAILABLE' } }) });
-    }
+    if (/gemini-3\.8-flash:/.test(req.url())) return busy();
     const dishJson = { items: [
       { name: 'Mela', search: 'mela cruda', grams: 150, unit: 'g', confidence: 'alta', per100: { kcal: 50, fat: 0.2, carbs: 12, protein: 0.3 } },
       { name: 'Piatto misto della casa', search: 'piatto misto della casa', grams: 300, unit: 'g', confidence: 'bassa', note: 'condimento non visibile',
@@ -531,7 +531,7 @@ try {
   assert.match(await p2.textContent('dialog .dish-body'), /1 voce scartata/);
   assert.equal(await p2.inputValue('dialog .dish-row >> nth=0 >> select'), 'db', 'mela: valori della banca dati');
   assert.match(await p2.textContent('dialog .dish-row >> nth=0 >> select'), /Banca dati: Mela, cruda/);
-  assert.match(await p2.textContent('dialog .dish-row >> nth=1'), /Valori stimati da Gemini/);
+  assert.match(await p2.textContent('dialog .dish-row >> nth=1'), /Valori stimati dalla foto/);
   await p2.fill('dialog .dish-row >> nth=1 >> .dish-qty', '200');
   // Mela 150 g × 52 kcal (banca dati) = 78; piatto 200 g × 180 = 360 → 438
   assert.match(await p2.textContent('dialog .dish-total'), /Totale 438 kcal/);
@@ -544,6 +544,54 @@ try {
   assert.equal(await pranzo.count(), 2);
   assert.equal(await p2.locator('.meal:has(h2:text("Pranzo")) .row-sub:has-text("stima da foto")').count(), 2);
   assert.match(await p2.textContent('.meal:has(h2:text("Pranzo")) .meal-kcal'), /^438\s*kcal$/);
+
+  // ---- OpenRouter come riserva (simulato): Gemini sovraccarico su entrambi i modelli, risponde OpenRouter.
+  const orr = { calls: [] };
+  const OR_KEY = 'sk-or-v1-chiave-di-prova-0123456789abcdef';
+  await ctx2.route('https://openrouter.ai/**', async (route) => {
+    const req = route.request();
+    const ocors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization,Content-Type' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: ocors });
+    orr.calls.push({ url: req.url(), auth: req.headers()['authorization'], referer: req.headers()['referer'], body: JSON.parse(req.postData() ?? '{}') });
+    const dishJson = { items: [{ name: 'Insalata mista', search: 'insalata mista', grams: 120, unit: 'g', confidence: 'media',
+      per100: { kcal: 20, fat: 0.2, carbs: 3, protein: 1.2 } }] };
+    return route.fulfill({ status: 200, contentType: 'application/json', headers: ocors,
+      body: JSON.stringify({ id: 'gen-1', model: 'nvidia/nemotron-3.5-super-vl:free',
+        choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(dishJson) } }] }) });
+  });
+  gem.down = true;
+  await p2.goto(BASE + '#/impostazioni');
+  await p2.waitForSelector('.settings');
+  const orSection = p2.locator('section.openrouter-set');
+  assert.equal(await orSection.locator('select').inputValue(), 'openrouter/free', 'modelli gratuiti come scelta iniziale');
+  await orSection.locator('input[type=password]').fill(OR_KEY);
+  await orSection.locator('button:has-text("Salva la chiave")').click();
+  await orSection.locator(':text("…cdef")').waitFor();
+  const gemBefore = gem.calls.length;
+  await p2.goto(`${BASE}#/aggiungi/${today}/dinner`);
+  await p2.waitForSelector('.add');
+  const [chooser2] = await Promise.all([p2.waitForEvent('filechooser'), p2.click('button:has-text("Foto del piatto")')]);
+  await chooser2.setFiles('public/icons/icon-512.png');
+  await p2.waitForSelector('dialog.sheet[open] .dish-preview');
+  assert.match(await p2.textContent('dialog .dish-body'), /a Google Gemini e, se non risponde, a OpenRouter/);
+  await p2.click('dialog button:has-text("Analizza")');
+  await p2.waitForSelector('dialog .dish-row');
+  assert.equal(gem.calls.length - gemBefore, 2, 'Gemini: modello scelto e Flash-Lite, entrambi sovraccarichi');
+  assert.equal(orr.calls.length, 1);
+  const oc = orr.calls[0];
+  assert.equal(oc.url, 'https://openrouter.ai/api/v1/chat/completions');
+  assert.equal(oc.auth, `Bearer ${OR_KEY}`, 'chiave solo nell’header');
+  assert.equal(oc.referer, undefined, 'nessun referrer');
+  assert.equal(oc.body.model, 'openrouter/free');
+  assert.match(oc.body.messages[0].content[1].image_url.url, /^data:image\/jpeg;base64,/);
+  assert.equal(oc.body.response_format.type, 'json_schema');
+  assert.equal(oc.body.provider.require_parameters, true);
+  assert.match(await p2.textContent('dialog .dish-fallback'),
+    /Stima fatta con OpenRouter, nvidia\/nemotron-3\.5-super-vl:free: Gemini 3\.8 Flash non era disponibile/);
+  assert.match(await p2.textContent('dialog .dish-row'), /Insalata mista/);
+  await p2.screenshot({ path: `${SHOTS}/20-foto-openrouter.png`, fullPage: true });
+  await p2.click('dialog .sheet-actions button:has-text("Annulla")');
+  await p2.waitForSelector('dialog.sheet', { state: 'detached' });
   await ctx2.close();
 
   // ---- Fase 3: Dropbox dell'utente (App key personale) e sincronizzazione cifrata tra due dispositivi.

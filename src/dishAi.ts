@@ -31,10 +31,10 @@ export const modelLabel = (id: string): string => MODELS.find((m) => m.id === id
  * dalle vecchie "AIza…"): solo caratteri stampabili senza spazi, che un header HTTP accetta.
  * La verifica vera la fa Google alla prima richiesta.
  */
-export const isGeminiKey = (s: string): boolean => /^[\x21-\x7e]{20,512}$/.test(s);
+export const isApiKey = (s: string): boolean => /^[\x21-\x7e]{20,512}$/.test(s);
 
 /** Toglie spazi, a capo e virgolette incollati per errore insieme alla chiave. */
-export const normalizeGeminiKey = (s: string): string => s.replace(/\s+/g, '').replace(/^["'`]+|["'`]+$/g, '');
+export const normalizeApiKey = (s: string): string => s.replace(/\s+/g, '').replace(/^["'`]+|["'`]+$/g, '');
 export const isModelId = (s: string): boolean => /^gemini-[a-z0-9.-]{2,40}$/.test(s);
 
 const KEYS: ReadonlyArray<NutrientKey> = ['kcal', 'fat', 'satFat', 'carbs', 'sugars', 'fiber', 'protein', 'salt'];
@@ -108,10 +108,11 @@ export function requestBody(imageBase64: string, mimeType: string, hint: string,
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/** Errore della stima da foto, con Gemini o con OpenRouter: il messaggio è per l'utente. */
 export class GeminiError extends Error {
   /** Lo schema JSON non è accettato: si riprova lo stesso modello senza. */
   readonly retryWithoutSchema: boolean;
-  /** Errore del servizio o del modello (sovraccarico, tempo scaduto, rete, limite): si può provare il modello di riserva. */
+  /** Errore del servizio o del modello (sovraccarico, tempo scaduto, rete, limite): si può provare il tentativo successivo. */
   readonly tryOtherModel: boolean;
   constructor(message: string, opts: { retryWithoutSchema?: boolean; tryOtherModel?: boolean } = {}) {
     super(message);
@@ -120,10 +121,27 @@ export class GeminiError extends Error {
   }
 }
 
-/** Modello da provare dopo un errore del modello scelto, se ha senso. */
-export function fallbackFor(model: string, err: unknown): string | undefined {
-  return err instanceof GeminiError && err.tryOtherModel && model !== FALLBACK_MODEL ? FALLBACK_MODEL : undefined;
+export interface AiStep {
+  provider: 'gemini' | 'openrouter';
+  model: string;
 }
+
+/**
+ * Ordine dei tentativi, solo con i servizi che hanno una chiave: il modello Gemini scelto,
+ * Gemini Flash-Lite di riserva, poi OpenRouter.
+ */
+export function dishPlan(geminiModel?: string, openRouterModel?: string): AiStep[] {
+  const steps: AiStep[] = [];
+  if (geminiModel) {
+    steps.push({ provider: 'gemini', model: geminiModel });
+    if (geminiModel !== FALLBACK_MODEL) steps.push({ provider: 'gemini', model: FALLBACK_MODEL });
+  }
+  if (openRouterModel) steps.push({ provider: 'openrouter', model: openRouterModel });
+  return steps;
+}
+
+/** Si passa al tentativo successivo solo se il problema è del servizio o del modello, non della chiave o della foto. */
+export const canTryNext = (err: unknown): boolean => err instanceof GeminiError && err.tryOtherModel;
 
 /** Messaggio per l'utente da uno stato HTTP e dal corpo dell'errore. */
 export function geminiError(status: number, body: string): GeminiError {

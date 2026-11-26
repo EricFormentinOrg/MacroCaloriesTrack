@@ -27,17 +27,20 @@ Dopo ogni modifica: `npm run build && npm test`. Dopo modifiche alla UI esegui a
   - `src/sync.ts` (motore di sincronizzazione con adattatori: meta, cifratura dei file, merge, conflitti);
   - `src/label.ts` (lettura della tabella nutrizionale da testo: voci multilingua, valori per 100 g, letture alternative scelte con le kcal, dubbi);
   - `src/stats.ts` (totali per giorno, settimane, tendenza del peso, scala degli assi);
-  - `src/dishAi.ts` (foto del piatto con Gemini: richiesta, schema, validazione della risposta, abbinamento con la banca dati, errori).
+  - `src/dishAi.ts` (foto del piatto con Gemini: richiesta, schema, validazione della risposta, abbinamento con la banca dati, errori, ordine dei tentativi `dishPlan`);
+  - `src/openrouter.ts` (OpenRouter come riserva o alternativa: richiesta Chat Completions, risposta, errori, modelli proposti).
 - `src/sources.ts`: caricamento della banca dati e chiamate a Open Food Facts con cache in IndexedDB.
 - `src/dropboxClient.ts`: login con codice, token in IndexedDB (`kv`: `dropbox`, `dropbox-pending`), rinnovo, RPC, upload condizionato, download.
 - `src/gemini.ts`: chiave e modello Gemini in IndexedDB (`kv`: `gemini`), preparazione della foto (ridotta, senza EXIF), chiamata con nuovo tentativo senza schema.
+- `src/openrouterClient.ts`: chiave e modello OpenRouter in IndexedDB (`kv`: `openrouter`), chiamata. `src/aiHttp.ts`: POST comune con tempo massimo (50 s) e messaggi di errore di rete.
+- `src/dishService.ts`: `analyzeDish`, prova i tentativi di `dishPlan` (Gemini scelto, Flash-Lite, OpenRouter) finché uno risponde.
 - `src/syncService.ts`: adattatori IndexedDB e Dropbox per `sync.ts`, chiave (`kv`: `sync-key`) e stato (`sync-state`), sincronizzazione automatica. Le scritture della sync usano `putBatch(..., silent)` per non rilanciarla.
 - `src/db.ts`: IndexedDB nativo. `src/repo.ts`: operazioni di dominio.
 - `src/ui.ts`: helper `h()` e `svg()` (sempre `createElement`/`createElementNS`), icone, toast, fogli modali (`<dialog>`), controlli. `src/components.ts`: elementi condivisi.
 - `src/router.ts`: routing su hash. `src/nav.ts`: `refresh()` della vista corrente.
-- `src/views/*`: diario (settimana, peso, copia), andamento (`trends.ts`, grafici SVG), aggiunta, elenco alimenti, editor alimento, profilo, impostazioni (con `dropboxSettings.ts` e `geminiSettings.ts`), foglio quantità, fogli di peso e copia (`sheets.ts`), foto del piatto (`dishPhoto.ts`).
+- `src/views/*`: diario (settimana, peso, copia), andamento (`trends.ts`, grafici SVG), aggiunta, elenco alimenti, editor alimento, profilo, impostazioni (con `dropboxSettings.ts`, `geminiSettings.ts` e `openrouterSettings.ts`), foglio quantità, fogli di peso e copia (`sheets.ts`), foto del piatto (`dishPhoto.ts`).
 - `public/`: `index.html` (con la CSP), `sw.js`, `css/app.css`, font, icone, manifest, `data/alimenti-ch.json` (generato da `scripts/import-ch.mjs`, non modificarlo a mano).
-- `tests/*.test.mjs`: test unitari. `tests/e2e/flow.e2e.mjs`: test end-to-end; Open Food Facts, Dropbox e Gemini sono sempre simulati con `route`, mai chiamati davvero.
+- `tests/*.test.mjs`: test unitari. `tests/e2e/flow.e2e.mjs`: test end-to-end; Open Food Facts, Dropbox, Gemini e OpenRouter sono sempre simulati con `route`, mai chiamati davvero.
 
 ## Regole non negoziabili
 
@@ -47,8 +50,8 @@ Dopo ogni modifica: `npm run build && npm test`. Dopo modifiche alla UI esegui a
 4. **Date locali** con `todayISO()` e `toISODate()`; mai `toISOString()` per le date del diario.
 5. **Le voci di diario copiano i valori dell'alimento**: non legarle a valori correnti dell'alimento.
 6. **Ogni record sincronizzabile** ha `id`, `updatedAt` e `deleted` (tombstone): niente cancellazioni fisiche dei dati utente, tranne "Cancella tutti i dati".
-7. **Validazione rigorosa di ogni dato esterno** (file importati, Dropbox, Open Food Facts, OCR), sul modello di `src/backup.ts`.
-8. **Segreti**: l'App key di Dropbox e la chiave Gemini le inserisce l'utente e stanno solo in IndexedDB del suo dispositivo (mai nel codice, nel backup o su Dropbox); l'App secret mai, né nel codice né nell'app. La chiave Gemini va solo nell'header `x-goog-api-key`, mai nell'URL. Token e chiavi solo in IndexedDB; la chiave AES come `CryptoKey` non estraibile.
+7. **Validazione rigorosa di ogni dato esterno** (file importati, Dropbox, Open Food Facts, OCR, risposte di Gemini e OpenRouter), sul modello di `src/backup.ts`.
+8. **Segreti**: l'App key di Dropbox e le chiavi Gemini e OpenRouter le inserisce l'utente e stanno solo in IndexedDB del suo dispositivo (mai nel codice, nel backup o su Dropbox); l'App secret mai, né nel codice né nell'app. La chiave Gemini va solo nell'header `x-goog-api-key`, quella OpenRouter solo in `Authorization: Bearer`; mai nell'URL. Token e chiavi solo in IndexedDB; la chiave AES come `CryptoKey` non estraibile.
 9. **Test** per ogni modulo puro nuovo; aggiorna l'e2e per ogni flusso nuovo.
 10. **Classi CSS**: controlla collisioni prima di introdurne di nuove. `.seg` è già il controllo segmentato. Un errore di questo tipo ha già causato un bug: la barra del giorno usa `.day-seg` e `.tone-*`.
 

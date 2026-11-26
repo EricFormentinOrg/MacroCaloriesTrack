@@ -1,12 +1,14 @@
-// Foto del piatto: Gemini stima alimenti e quantità, l'utente controlla e conferma. Niente salvataggio automatico.
+// Foto del piatto: Gemini o OpenRouter stimano alimenti e quantità, l'utente controlla e conferma. Niente salvataggio automatico.
 import { catalogFood } from '../catalog.js';
 import type { Catalog } from '../catalog.js';
 import { macroMini } from '../components.js';
-import { GeminiError, matchCatalog, modelLabel, totalKcal } from '../dishAi.js';
+import { GeminiError, matchCatalog, totalKcal } from '../dishAi.js';
 import type { DishItem, Match } from '../dishAi.js';
+import { analyzeDish, dishProviders } from '../dishService.js';
+import type { DishProviders, DishResult } from '../dishService.js';
 import { fmtInt, parseDecimal, toInput } from '../format.js';
-import { analyzeDish, getGemini, prepareImage } from '../gemini.js';
-import type { DishResult, PreparedImage } from '../gemini.js';
+import { prepareImage } from '../gemini.js';
+import type { PreparedImage } from '../gemini.js';
 import { mealLabel } from '../model.js';
 import type { Entry, Meal, Nutrients } from '../model.js';
 import { scale, sum } from '../nutrition.js';
@@ -26,10 +28,11 @@ const perOf = (r: Row): Nutrients => (r.useDb && r.match ? r.match.item.per100 :
 
 /** Avvia il flusso dal file scelto o scattato. Restituisce le voci aggiunte (per l'annullamento). */
 export async function openDishPhoto(file: File, date: string, meal: Meal): Promise<Entry[] | undefined> {
-  if (!(await getGemini())) {
+  const providers = await dishProviders();
+  if (!providers.gemini && !providers.openrouter) {
     await openSheet('Foto del piatto', (close) => h('div', null,
       h('h2', { class: 'sheet-title' }, 'Foto del piatto'),
-      h('p', null, 'Per stimare un piatto da foto serve una tua chiave Gemini. Inseriscila in Impostazioni, sezione “Foto del piatto”.'),
+      h('p', null, 'Per stimare un piatto da foto serve una tua chiave Gemini o OpenRouter. Inseriscila in Impostazioni, sezioni “Foto del piatto” e “OpenRouter”.'),
       h('div', { class: 'sheet-actions' },
         h('button', { type: 'button', class: 'btn btn-quiet', onClick: () => close() }, 'Annulla'),
         h('a', { class: 'btn btn-primary', href: '#/impostazioni', onClick: () => close() }, 'Vai alle impostazioni'),
@@ -47,13 +50,19 @@ export async function openDishPhoto(file: File, date: string, meal: Meal): Promi
   const preview = URL.createObjectURL(img.blob);
   const catalogP: Promise<Catalog | undefined> = loadCatalog().catch(() => undefined);
   try {
-    return await openSheet<Entry[]>('Foto del piatto', (close) => build(close, img, preview, catalogP, date, meal));
+    return await openSheet<Entry[]>('Foto del piatto', (close) => build(close, img, preview, catalogP, date, meal, providers));
   } finally {
     URL.revokeObjectURL(preview);
   }
 }
 
-function build(close: (v?: Entry[]) => void, img: PreparedImage, preview: string, catalogP: Promise<Catalog | undefined>, date: string, meal: Meal): HTMLElement {
+/** Dove va la foto, secondo le chiavi inserite. */
+function destination(p: DishProviders): string {
+  if (p.gemini && p.openrouter) return 'a Google Gemini e, se non risponde, a OpenRouter, con le tue chiavi';
+  return p.gemini ? 'a Google Gemini con la tua chiave' : 'a OpenRouter con la tua chiave';
+}
+
+function build(close: (v?: Entry[]) => void, img: PreparedImage, preview: string, catalogP: Promise<Catalog | undefined>, date: string, meal: Meal, providers: DishProviders): HTMLElement {
   const body = h('div', { class: 'dish-body', 'aria-live': 'polite' });
   const hint = h('textarea', {
     class: 'label-text dish-hint',
@@ -67,7 +76,7 @@ function build(close: (v?: Entry[]) => void, img: PreparedImage, preview: string
     body.replaceChildren(
       hint,
       ...(message ? [h('p', { class: 'form-error', role: 'alert' }, message)] : []),
-      h('p', { class: 'muted' }, 'La foto viene inviata a Google Gemini con la tua chiave. Prima la riduco e tolgo i metadati, compresa la posizione.'),
+      h('p', { class: 'muted' }, `La foto viene inviata ${destination(providers)}. Prima la riduco e tolgo i metadati, compresa la posizione.`),
       h('div', { class: 'sheet-actions' },
         h('button', { type: 'button', class: 'btn btn-quiet', onClick: () => close() }, 'Annulla'),
         h('button', { type: 'button', class: 'btn btn-primary', onClick: () => void run() }, message ? 'Riprova' : 'Analizza'),
@@ -81,7 +90,7 @@ function build(close: (v?: Entry[]) => void, img: PreparedImage, preview: string
     let dish: DishResult;
     try {
       dish = await analyzeDish(img, hint.value, (from, to) => {
-        wait.textContent = `${modelLabel(from)} non è disponibile ora: provo con ${modelLabel(to)}…`;
+        wait.textContent = `${from} non è disponibile ora: provo con ${to}…`;
       });
     } catch (e) {
       if (!(e instanceof GeminiError)) console.warn(e);
@@ -137,11 +146,11 @@ function build(close: (v?: Entry[]) => void, img: PreparedImage, preview: string
           },
         },
           h('option', { value: 'db' }, `Banca dati: ${r.match.item.name}`),
-          h('option', { value: 'ai' }, 'Stima Gemini'),
+          h('option', { value: 'ai' }, 'Stima dalla foto'),
         );
         source = select;
       } else {
-        source = h('span', { class: 'muted dish-src-label' }, 'Valori stimati da Gemini');
+        source = h('span', { class: 'muted dish-src-label' }, 'Valori stimati dalla foto');
       }
       const li = h('li', { class: 'dish-row' },
         h('div', { class: 'dish-line' },
@@ -176,11 +185,11 @@ function build(close: (v?: Entry[]) => void, img: PreparedImage, preview: string
     body.replaceChildren(
       rows.length
         ? h('p', { class: 'muted' }, 'Controlla alimenti e quantità: sono stime. Puoi correggere i grammi, togliere voci e scegliere i valori della banca dati quando c’è un alimento corrispondente.')
-        : h('p', { class: 'form-error' }, 'Gemini non ha riconosciuto alimenti in questa foto.'),
+        : h('p', { class: 'form-error' }, 'Il modello non ha riconosciuto alimenti in questa foto.'),
       ...(dish.fallbackFrom
-        ? [h('p', { class: 'muted dish-fallback' }, `Stima fatta con ${modelLabel(dish.model)}: ${modelLabel(dish.fallbackFrom)} non era disponibile.`)]
+        ? [h('p', { class: 'muted dish-fallback' }, `Stima fatta con ${dish.source}: ${dish.fallbackFrom} non era disponibile.`)]
         : []),
-      ...(dish.notes ? [h('p', { class: 'muted' }, `Nota di Gemini: ${dish.notes}`)] : []),
+      ...(dish.notes ? [h('p', { class: 'muted' }, `Nota del modello: ${dish.notes}`)] : []),
       ...(dish.dropped ? [h('p', { class: 'warn' }, dish.dropped === 1 ? '1 voce scartata perché non valida.' : `${dish.dropped} voci scartate perché non valide.`)] : []),
       list,
       total,
