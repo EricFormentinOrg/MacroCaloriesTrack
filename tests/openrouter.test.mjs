@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { GeminiError, parseDish } from '../dist/js/dishAi.js';
-import { OPENROUTER_URL, OR_DEFAULT_MODEL, OR_MODELS, isOrModelId, orError, orModelLabel, orRequestBody, orResponseText } from '../dist/js/openrouter.js';
+import { OPENROUTER_URL, OR_DEFAULT_MODEL, OR_MODELS, OR_RETRIES, isOrModelId, orError, orModelLabel, orRequestBody, orResponseText, orRetryDelay } from '../dist/js/openrouter.js';
 
 const completion = (content, extra = {}) => ({
   id: 'gen-1',
@@ -71,4 +71,33 @@ test('errori HTTP tradotti in istruzioni, con o senza tentativo successivo', () 
   assert.equal(schema.retryWithoutSchema, true);
   assert.match(orError(404, body(404, 'No endpoints found')).message, /OpenRouter non riuscita \(404: No endpoints found\)/);
   assert.match(orError(418, '<html>').message, /\(418\)/);
+});
+
+test('errori veri del 26/11/2026: privacy, parametri, limite del fornitore', () => {
+  const privacy = JSON.stringify({ error: { code: 404, message: '0 endpoints out of 1 requested are available matching your guardrail restrictions and data policy. We removed them for the following reasons (an endpoint may have matched multiple reasons):\nFree model training violation (account settings): 1 endpoint excluded; configurable at https://openrouter.ai/settings/privacy' } });
+  assert.match(orError(404, privacy).message, /impostazioni privacy.*Settings → Privacy/);
+  const params = JSON.stringify({ error: { code: 404, message: 'No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection' } });
+  assert.match(orError(404, params).message, /non accetta foto con risposta JSON/);
+  const upstream = JSON.stringify({ error: { message: 'Provider returned error', code: 429, metadata: {
+    raw: 'inclusionai/ling-3.2-flash:free is temporarily rate-limited upstream. Please retry shortly, or add your own provider key to use your own limits',
+    provider_name: 'Ant Digital', is_byok: false, provider_error_code: 'rpm_limit_exceeded', limit_source: 'upstream_provider_shared_pool' } } });
+  const e = orError(429, upstream);
+  assert.match(e.message, /al limite presso il suo fornitore/);
+  assert.equal(e.tryOtherModel, true);
+  const own = JSON.stringify({ error: { code: 429, message: 'Rate limit exceeded: free-models-per-day' } });
+  assert.match(orError(429, own).message, /20 al minuto/, 'limite del proprio account');
+});
+
+test('nuovi tentativi: solo per limiti e errori temporanei, attese brevi', () => {
+  assert.equal(OR_RETRIES, 2);
+  assert.equal(orRetryDelay(429, null, 0), 3000);
+  assert.equal(orRetryDelay(429, null, 1), 6000);
+  assert.equal(orRetryDelay(429, null, 2), undefined, 'al massimo due nuovi tentativi');
+  assert.equal(orRetryDelay(502, null, 0), 3000);
+  assert.equal(orRetryDelay(503, null, 0), 3000);
+  assert.equal(orRetryDelay(429, '4', 0), 4000, 'Retry-After rispettato');
+  assert.equal(orRetryDelay(429, '0', 0), 1000);
+  assert.equal(orRetryDelay(429, '120', 0), undefined, 'attesa troppo lunga: niente nuovo tentativo');
+  assert.equal(orRetryDelay(429, 'domani', 0), 3000, 'Retry-After non numerico ignorato');
+  for (const s of [400, 401, 402, 403, 404, 408]) assert.equal(orRetryDelay(s, null, 0), undefined, `stato ${s}`);
 });

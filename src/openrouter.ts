@@ -48,12 +48,26 @@ export function orRequestBody(imageBase64: string, mimeType: string, hint: strin
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Messaggio per l'utente da uno stato HTTP e dal corpo dell'errore di OpenRouter. */
+const clip = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, 300);
+
+/**
+ * Messaggio per l'utente da uno stato HTTP e dal corpo dell'errore di OpenRouter.
+ * I casi particolari vengono da risposte vere del 26/11/2026.
+ */
 export function orError(status: number, body: string): GeminiError {
   let msg = '';
+  let raw = '';
+  let limitSource = '';
   try {
     const j: unknown = JSON.parse(body);
-    if (isObj(j) && isObj(j.error) && typeof j.error.message === 'string') msg = j.error.message.replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (isObj(j) && isObj(j.error)) {
+      if (typeof j.error.message === 'string') msg = clip(j.error.message);
+      const m = j.error.metadata;
+      if (isObj(m)) {
+        if (typeof m.raw === 'string') raw = clip(m.raw);
+        if (typeof m.limit_source === 'string') limitSource = m.limit_source;
+      }
+    }
   } catch {
     /* corpo non JSON */
   }
@@ -62,10 +76,37 @@ export function orError(status: number, body: string): GeminiError {
   if (status === 401) return new GeminiError('La chiave OpenRouter non è valida: controllala in Impostazioni.');
   if (status === 402) return new GeminiError('Credito OpenRouter esaurito: ricaricalo o scegli i modelli gratuiti in Impostazioni.');
   if (status === 403) return new GeminiError(`OpenRouter ha bloccato la richiesta${msg ? `: ${msg}` : '.'}`);
+  if (status === 404 && /data policy|privacy|training/i.test(msg)) {
+    return new GeminiError('Nessun modello OpenRouter disponibile con le tue impostazioni privacy: su openrouter.ai, in Settings → Privacy, permetti i fornitori dei modelli gratuiti che addestrano sui dati, oppure scegli un modello a pagamento in Impostazioni.');
+  }
+  if (status === 404 && /requested parameters/i.test(msg)) {
+    return new GeminiError('Il modello scelto su OpenRouter non accetta foto con risposta JSON: scegline un altro in Impostazioni.');
+  }
   if (status === 408) return new GeminiError('OpenRouter non ha risposto in tempo: riprova tra qualche minuto.', other);
+  if (status === 429 && (/^upstream/.test(limitSource) || /upstream/i.test(raw))) {
+    return new GeminiError('Il modello gratuito è al limite presso il suo fornitore: riprova tra poco, oppure scegli un modello a pagamento in Impostazioni.', other);
+  }
   if (status === 429) return new GeminiError('Limite di richieste OpenRouter raggiunto: con i modelli gratuiti sono 20 al minuto e 50 al giorno senza crediti acquistati. Riprova più tardi.', other);
   if (status >= 500) return new GeminiError('Il modello su OpenRouter non è disponibile ora: riprova tra qualche minuto.', other);
   return new GeminiError(`Richiesta a OpenRouter non riuscita (${status}${msg ? `: ${msg}` : ''}).`);
+}
+
+/** Nuovi tentativi sullo stesso servizio dopo un limite o un errore temporaneo del fornitore. */
+export const OR_RETRIES = 2;
+
+/**
+ * Attesa in millisecondi prima del nuovo tentativo `attempt` (0, 1, …), o undefined se non conviene
+ * riprovare. Con il router gratuito un nuovo tentativo può finire su un altro modello: il 26/11/2026,
+ * dopo un 429 del fornitore, la richiesta successiva è riuscita.
+ */
+export function orRetryDelay(status: number, retryAfter: string | null, attempt: number): number | undefined {
+  if (attempt >= OR_RETRIES || ![429, 502, 503].includes(status)) return undefined;
+  if (retryAfter && /^\d+$/.test(retryAfter.trim())) {
+    const s = Number(retryAfter.trim());
+    // Un'attesa lunga non vale la pena: meglio l'errore chiaro o il tentativo successivo.
+    return s <= 10 ? Math.max(1, s) * 1000 : undefined;
+  }
+  return (attempt + 1) * 3000;
 }
 
 export interface OrText {

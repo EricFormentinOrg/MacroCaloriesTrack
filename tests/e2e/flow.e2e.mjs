@@ -362,8 +362,9 @@ try {
   const p2 = await ctx2.newPage();
   p2.on('console', (m) => {
     if (m.type() !== 'error' || /status of 503|blocked by CORS policy|net::ERR_FAILED/.test(m.text())) return;
-    // Il 400 di Gemini è voluto: simula lo schema rifiutato.
+    // Il 400 di Gemini è voluto: simula lo schema rifiutato. Il 429 di OpenRouter simula il limite del fornitore.
     if (/status of 400/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://generativelanguage.googleapis.com/')) return;
+    if (/status of 429/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://openrouter.ai/')) return;
     problems.push(`(fase 2) ${m.text()}`);
   });
   p2.on('pageerror', (e) => problems.push(`pageerror(fase 2): ${e.message}`));
@@ -553,6 +554,12 @@ try {
     const ocors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization,Content-Type' };
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: ocors });
     orr.calls.push({ url: req.url(), auth: req.headers()['authorization'], referer: req.headers()['referer'], body: JSON.parse(req.postData() ?? '{}') });
+    // Primo invio: modello gratuito al limite presso il fornitore (risposta vera del 26/11/2026). L'app riprova da sola.
+    if (orr.calls.length === 1) {
+      return route.fulfill({ status: 429, contentType: 'application/json', headers: ocors,
+        body: JSON.stringify({ error: { message: 'Provider returned error', code: 429, metadata: {
+          raw: 'inclusionai/ling-3.2-flash:free is temporarily rate-limited upstream. Please retry shortly.', limit_source: 'upstream_provider_shared_pool' } } }) });
+    }
     const dishJson = { items: [{ name: 'Insalata mista', search: 'insalata mista', grams: 120, unit: 'g', confidence: 'media',
       per100: { kcal: 20, fat: 0.2, carbs: 3, protein: 1.2 } }] };
     return route.fulfill({ status: 200, contentType: 'application/json', headers: ocors,
@@ -577,8 +584,9 @@ try {
   await p2.click('dialog button:has-text("Analizza")');
   await p2.waitForSelector('dialog .dish-row');
   assert.equal(gem.calls.length - gemBefore, 2, 'Gemini: modello scelto e Flash-Lite, entrambi sovraccarichi');
-  assert.equal(orr.calls.length, 1);
-  const oc = orr.calls[0];
+  assert.equal(orr.calls.length, 2, '429 del fornitore: nuovo tentativo automatico');
+  assert.deepEqual(orr.calls[1].body, orr.calls[0].body, 'stessa richiesta');
+  const oc = orr.calls[1];
   assert.equal(oc.url, 'https://openrouter.ai/api/v1/chat/completions');
   assert.equal(oc.auth, `Bearer ${OR_KEY}`, 'chiave solo nell’header');
   assert.equal(oc.referer, undefined, 'nessun referrer');

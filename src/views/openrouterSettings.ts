@@ -24,7 +24,7 @@ function privacy(): HTMLElement {
       h('li', null, 'Modelli gratuiti: nessun costo, al massimo 20 richieste al minuto e 50 al giorno (1000 al giorno se hai acquistato almeno 10 crediti). OpenRouter sceglie ogni volta un modello gratuito che sa leggere le foto.'),
       h('li', null, 'Modelli a pagamento: paghi a consumo con il credito del tuo account OpenRouter, solo il modello che ha risposto.'),
       h('li', null, 'La foto, ridotta e senza metadati, passa da OpenRouter al fornitore del modello. OpenRouter non conserva i contenuti, a meno che tu non attivi il log nel tuo account.'),
-      h('li', null, 'Alcuni fornitori possono usare i dati per addestrare i modelli: puoi escluderli nelle impostazioni privacy del tuo account OpenRouter, con opzioni separate per modelli gratuiti e a pagamento. Non fotografare persone o documenti.'),
+      h('li', null, 'Alcuni fornitori possono usare i dati per addestrare i modelli: puoi escluderli nelle impostazioni privacy del tuo account OpenRouter, con opzioni separate per modelli gratuiti e a pagamento. Se li escludi per i gratuiti, quelli che leggono le foto diventano pochissimi e spesso al limite. Non fotografare persone o documenti.'),
     ),
   );
 }

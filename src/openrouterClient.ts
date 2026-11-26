@@ -5,7 +5,7 @@ import type { OpenRouterSettings } from './db.js';
 import { GeminiError, isApiKey, normalizeApiKey, parseDish } from './dishAi.js';
 import type { Dish } from './dishAi.js';
 import type { PreparedImage } from './gemini.js';
-import { OPENROUTER_URL, isOrModelId, orError, orRequestBody, orResponseText } from './openrouter.js';
+import { OPENROUTER_URL, isOrModelId, orError, orRequestBody, orResponseText, orRetryDelay } from './openrouter.js';
 
 export async function getOpenRouter(): Promise<OpenRouterSettings | undefined> {
   return (await db.get('kv', 'openrouter')) as OpenRouterSettings | undefined;
@@ -34,13 +34,28 @@ function call(s: OpenRouterSettings, img: PreparedImage, hint: string, withSchem
   return postAi(OPENROUTER_URL, { Authorization: `Bearer ${s.apiKey}` }, orRequestBody(img.base64, img.mimeType, hint, s.model, withSchema), 'OpenRouter');
 }
 
+const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Invia, e su limite o errore temporaneo del fornitore riprova dopo una breve attesa (orRetryDelay). */
+async function send(s: OpenRouterSettings, img: PreparedImage, hint: string, withSchema: boolean): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await call(s, img, hint, withSchema);
+    if (res.ok) return res;
+    // Retry-After è leggibile solo se OpenRouter lo espone via CORS; altrimenti vale l'attesa predefinita.
+    const delay = orRetryDelay(res.status, res.headers.get('retry-after'), attempt);
+    if (delay === undefined) return res;
+    await res.body?.cancel().catch(() => undefined);
+    await wait(delay);
+  }
+}
+
 /** Un tentativo con OpenRouter: voci validate e il modello che ha risposto (vuoto se non indicato). */
 export async function openRouterAttempt(s: OpenRouterSettings, img: PreparedImage, hint: string): Promise<{ dish: Dish; model: string }> {
-  let res = await call(s, img, hint, true);
+  let res = await send(s, img, hint, true);
   if (!res.ok) {
     const err = orError(res.status, await res.text().catch(() => ''));
     if (!err.retryWithoutSchema) throw err;
-    res = await call(s, img, hint, false);
+    res = await send(s, img, hint, false);
     if (!res.ok) throw orError(res.status, await res.text().catch(() => ''));
   }
   const r = orResponseText(await readJson(res, 'OpenRouter'));
