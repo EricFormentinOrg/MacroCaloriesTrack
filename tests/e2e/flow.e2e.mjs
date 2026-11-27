@@ -337,6 +337,10 @@ try {
     code: '8000000000062', product_name_it: 'Passata di pomodoro', brands: 'Conserve Esempio', quantity: '700 g',
     nutriments: { 'energy-kcal_100g': 36, fat_100g: 0.2, carbohydrates_100g: 6, sugars_100g: 5, proteins_100g: 1.4, salt_100g: 0.4 },
   };
+  const nutella = {
+    code: '8000500310427', product_name_it: 'Nutella', brands: 'Ferrero', product_quantity_unit: 'g', quantity: '450 g', serving_quantity: 15,
+    nutriments: { 'energy-kcal_100g': 539, fat_100g: 30.9, 'saturated-fat_100g': 10.6, carbohydrates_100g: 57.5, sugars_100g: 56.3, proteins_100g: 6.3, salt_100g: 0.107 },
+  };
   const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
   await ctx2.addInitScript(() =>
     document.addEventListener('securitypolicyviolation', (e) => console.error('CSP-VIOLATION', e.violatedDirective, e.blockedURI)),
@@ -356,17 +360,40 @@ try {
       off.fresh = (off.fresh ?? 0) + 1;
       return json({ count: off.fresh === 1 ? 0 : 1, page: 1, page_size: 24, products: off.fresh === 1 ? [] : [{ ...passata, code: '8000000000079', product_name_it: 'Tagliatelle fresche' }] });
     }
-    if (u.pathname === '/cgi/search.pl' && u.searchParams.get('search_terms') === 'nutella') {
+    if (u.pathname === '/cgi/search.pl' && ['nutella', 'cioccolato fondente'].includes(u.searchParams.get('search_terms'))) {
       // Come il servizio reale: pagina HTML senza header CORS, che il browser blocca.
       return route.fulfill({ status: 503, contentType: 'text/html', body: '<!DOCTYPE html><title>Page temporarily unavailable</title>' });
     }
     if (u.pathname === '/api/v2/product/8000000000062.json') return json({ code: '8000000000062', status: 1, product: passata });
+    if (u.pathname === '/api/v2/product/8000500310427.json') return json({ code: '8000500310427', status: 1, product: nutella });
     problems.push(`richiesta OFF inattesa: ${req.url()}`);
     return route.fulfill({ status: 404, headers: cors, body: '' });
+  });
+  // Search-a-licious, riserva della ricerca per nome. Come quello vero (27/11/2026): CORS che rimanda l'origine,
+  // documenti con marchi a prefisso "xx:" e senza nutrienti.
+  const sal = { calls: [] };
+  await ctx2.route('https://search.openfoodfacts.org/**', async (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+    const scors = { 'Access-Control-Allow-Origin': 'http://localhost:8181', 'Access-Control-Allow-Headers': 'x-user-agent', Vary: 'Origin' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 200, headers: scors });
+    sal.calls.push({ q: u.searchParams.get('q'), langs: u.searchParams.get('langs'), fields: u.searchParams.get('fields'), order: off.calls.length });
+    const page = { page: 1, page_size: 24, page_count: 1, took: 3, timed_out: false, is_count_exact: true };
+    if (u.searchParams.get('q') === 'nutella') {
+      return route.fulfill({ status: 200, contentType: 'application/json', headers: scors, body: JSON.stringify({ ...page, count: 1,
+        hits: [{ code: '8000500310427', product_name: 'Nutella', product_name_it: 'Nutella', brands: ['xx:Ferrero'], quantity: '450 g', product_quantity_unit: 'g', nutriments: null }] }) });
+    }
+    if (u.searchParams.get('q') === 'cioccolato fondente') {
+      return route.fulfill({ status: 500, contentType: 'application/json', headers: scors, body: JSON.stringify({ errors: [{ title: 'Internal error' }] }) });
+    }
+    problems.push(`richiesta Search-a-licious inattesa: ${req.url()}`);
+    return route.fulfill({ status: 404, headers: scors, body: '' });
   });
   const p2 = await ctx2.newPage();
   p2.on('console', (m) => {
     if (m.type() !== 'error' || /status of 503|blocked by CORS policy|net::ERR_FAILED/.test(m.text())) return;
+    // Il 500 di Search-a-licious è voluto: riserva anch'essa giù.
+    if (/status of 500/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://search.openfoodfacts.org/')) return;
     // Il 400 di Gemini è voluto: simula lo schema rifiutato. Il 429 di OpenRouter simula il limite del fornitore.
     if (/status of 400/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://generativelanguage.googleapis.com/')) return;
     if (/status of 429/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://openrouter.ai/')) return;
@@ -444,11 +471,38 @@ try {
   await p2.waitForSelector('[data-src="off"] .row:has-text("Tagliatelle fresche")');
   assert.equal(off.fresh, 2, 'risultato vuoto non servito dalla cache');
 
-  // Servizio non disponibile (503): messaggio, nessun errore
+  // Ricerca principale non disponibile (503 senza CORS): risultati da Search-a-licious, valori dalla scheda prodotto.
+  const mainBefore = off.calls.length;
   await p2.fill('.search', 'nutella');
+  await p2.click('.off-cta');
+  await p2.waitForSelector('[data-src="off"] .row:has-text("Nutella")');
+  assert.equal(off.calls.length, mainBefore + 1, 'prima la ricerca principale');
+  assert.deepEqual(sal.calls.map((c) => [c.q, c.langs]), [['nutella', 'it']]);
+  assert.match(sal.calls[0].fields, /nutriments/);
+  assert.match(await p2.textContent('[data-src="off"] .off-alt'), /motore di ricerca alternativo/);
+  assert.equal(await p2.textContent('[data-src="off"] .row:has-text("Nutella") .row-sub'), 'Ferrero, valori alla scelta', 'marchio senza prefisso');
+  assert.equal(await p2.locator('[data-src="off"] li:has-text("Nutella") .fav-toggle').count(), 0, 'niente preferito senza valori');
+  await p2.screenshot({ path: `${SHOTS}/10b-ricerca-alternativa.png`, fullPage: true });
+  await p2.click('[data-src="off"] .row:has-text("Nutella")');
+  await p2.waitForSelector('dialog.sheet[open] .qty-input');
+  assert.equal(off.calls[off.calls.length - 1].path, '/api/v2/product/8000500310427.json', 'valori dalla scheda prodotto');
+  assert.match(await p2.textContent('dialog.sheet[open]'), /Nutella/);
+  await p2.fill('dialog .qty-input', '100');
+  assert.match(await p2.textContent('dialog.sheet[open]'), /539\s*kcal/);
+  await p2.click('dialog button:has-text("Annulla")');
+  await p2.waitForSelector('dialog.sheet', { state: 'detached' });
+
+  // Ricerca principale in pausa dopo l'errore: si va dritti alla riserva. Se anche lei fallisce, la principale
+  // viene riprovata e resta il suo messaggio.
+  await p2.fill('.search', 'cioccolato fondente');
   await p2.click('.off-cta');
   await p2.waitForSelector('[data-src="off"] .form-error');
   assert.match(await p2.textContent('[data-src="off"] .form-error'), /non accetta ricerche in questo momento: il loro servizio/);
+  const sc = sal.calls.find((c) => c.q === 'cioccolato fondente');
+  const mainCalls = off.calls.filter((c) => c.q === 'cioccolato fondente');
+  assert.ok(sc, 'riserva provata');
+  assert.equal(mainCalls.length, 1);
+  assert.equal(off.calls.indexOf(mainCalls[0]), sc.order, 'riserva prima della principale, che era in pausa');
 
   // Alimenti: preferiti e provenienza
   await p2.click('a[data-tab="alimenti"]');

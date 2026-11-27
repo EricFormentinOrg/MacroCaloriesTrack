@@ -22,14 +22,14 @@ Dopo ogni modifica: `npm run build && npm test`. Dopo modifiche alla UI esegui a
 - Moduli puri, senza DOM, testati in Node:
   - `src/dates.ts`, `src/format.ts`, `src/nutrition.ts`, `src/search.ts`;
   - `src/crypto.ts`, `src/merge.ts`, `src/backup.ts`;
-  - `src/catalog.ts` (banca dati svizzera), `src/off.ts` (Open Food Facts: URL, validazione, limiti);
+  - `src/catalog.ts` (banca dati svizzera), `src/off.ts` (Open Food Facts: URL, validazione, limiti; Search-a-licious come riserva della ricerca per nome);
   - `src/dropbox.ts` (Dropbox: PKCE, URL, validazione delle risposte, classificazione degli errori);
   - `src/sync.ts` (motore di sincronizzazione con adattatori: meta, cifratura dei file, merge, conflitti);
   - `src/label.ts` (lettura della tabella nutrizionale da testo: voci multilingua, valori per 100 g, letture alternative scelte con le kcal, dubbi);
   - `src/stats.ts` (totali per giorno, settimane, tendenza del peso, scala degli assi);
   - `src/dishAi.ts` (stima del pasto da foto o da descrizione, `DishInput`: prompt, richiesta Gemini, schema, validazione della risposta, abbinamento con la banca dati, errori, ordine dei tentativi `dishPlan` con il servizio scelto come primo, valori corretti a mano `editedValues`);
   - `src/openrouter.ts` (OpenRouter come riserva o alternativa: richiesta Chat Completions, risposta, errori, modelli proposti).
-- `src/sources.ts`: caricamento della banca dati e chiamate a Open Food Facts con cache in IndexedDB.
+- `src/sources.ts`: caricamento della banca dati e chiamate a Open Food Facts con cache in IndexedDB; se `cgi/search.pl` non risponde, ricerca su Search-a-licious (risultati `partial`, valori dalla scheda prodotto alla scelta).
 - `src/dropboxClient.ts`: login con codice, token in IndexedDB (`kv`: `dropbox`, `dropbox-pending`), rinnovo, RPC, upload condizionato, download.
 - `src/gemini.ts`: chiave e modello Gemini in IndexedDB (`kv`: `gemini`), preparazione della foto (ridotta, senza EXIF), chiamata con nuovo tentativo senza schema.
 - `src/openrouterClient.ts`: chiave e modello OpenRouter in IndexedDB (`kv`: `openrouter`), chiamata. `src/aiHttp.ts`: POST comune con tempo massimo (50 s) e messaggi di errore di rete.
@@ -40,7 +40,7 @@ Dopo ogni modifica: `npm run build && npm test`. Dopo modifiche alla UI esegui a
 - `src/router.ts`: routing su hash. `src/nav.ts`: `refresh()` della vista corrente.
 - `src/views/*`: diario (settimana, peso, copia), andamento (`trends.ts`, grafici SVG), aggiunta, elenco alimenti, editor alimento, profilo, impostazioni (con `dropboxSettings.ts`, `aiSettings.ts` per il servizio da provare per primo, `geminiSettings.ts` e `openrouterSettings.ts`), foglio quantità, fogli di peso e copia (`sheets.ts`), stima del pasto da foto o descrizione con foglio di revisione condiviso (`dish.ts`).
 - `public/`: `index.html` (con la CSP), `sw.js`, `css/app.css`, font, icone, manifest, `data/alimenti-ch.json` (generato da `scripts/import-ch.mjs`, non modificarlo a mano).
-- `tests/*.test.mjs`: test unitari. `tests/e2e/flow.e2e.mjs`: test end-to-end; Open Food Facts, Dropbox, Gemini e OpenRouter sono sempre simulati con `route`, mai chiamati davvero.
+- `tests/*.test.mjs`: test unitari. `tests/e2e/flow.e2e.mjs`: test end-to-end; Open Food Facts (compreso Search-a-licious), Dropbox, Gemini e OpenRouter sono sempre simulati con `route`, mai chiamati davvero.
 
 ## Regole non negoziabili
 

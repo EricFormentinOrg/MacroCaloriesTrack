@@ -57,7 +57,7 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 
 ## Sicurezza
 
-- La CSP permette solo risorse dello stesso sito: nessuno script o font esterno. Uniche eccezioni, in `connect-src`, le chiamate API a Open Food Facts, Dropbox (`api.dropboxapi.com`, `content.dropboxapi.com`), Gemini (`generativelanguage.googleapis.com`) e OpenRouter (`openrouter.ai`).
+- La CSP permette solo risorse dello stesso sito: nessuno script o font esterno. Uniche eccezioni, in `connect-src`, le chiamate API a Open Food Facts (`world.openfoodfacts.org` e, come riserva della ricerca per nome, `search.openfoodfacts.org`), Dropbox (`api.dropboxapi.com`, `content.dropboxapi.com`), Gemini (`generativelanguage.googleapis.com`) e OpenRouter (`openrouter.ai`).
 - Le risposte di Open Food Facts vengono validate campo per campo, come i backup.
 - Chiavi Gemini e OpenRouter solo in IndexedDB e solo negli header della richiesta; le risposte dei modelli sono validate campo per campo.
 - Nessun `innerHTML` nel codice: testi e file importati non possono iniettare markup.
