@@ -7,6 +7,7 @@ import * as repo from '../repo.js';
 import { clearOffCache, loadCatalog } from '../sources.js';
 import { confirmSheet, h, openSheet, toast } from '../ui.js';
 import { VERSION } from '../version.js';
+import { aiSection } from './aiSettings.js';
 import { dropboxSection } from './dropboxSettings.js';
 import { geminiSection } from './geminiSettings.js';
 import { openRouterSection } from './openrouterSettings.js';
@@ -86,8 +87,8 @@ async function sourcesSection(): Promise<HTMLElement> {
 }
 
 export async function settingsView(): Promise<HTMLElement> {
-  const [statusText, sources, dropbox, gemini, openrouter] = await Promise.all([
-    storageStatus(), sourcesSection(), dropboxSection(), geminiSection(), openRouterSection(),
+  const [statusText, sources, dropbox, ai, gemini, openrouter] = await Promise.all([
+    storageStatus(), sourcesSection(), dropboxSection(), aiSection(), geminiSection(), openRouterSection(),
   ]);
   const status = h('p', { class: 'muted' }, statusText);
 
@@ -185,6 +186,8 @@ export async function settingsView(): Promise<HTMLElement> {
     h('header', { class: 'view-head' }, h('h1', null, 'Impostazioni')),
 
     dropbox,
+
+    ai,
 
     gemini,
 

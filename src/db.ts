@@ -44,6 +44,12 @@ export interface OpenRouterSettings {
   model: string;
 }
 
+/** Servizio da provare per primo nella stima del pasto: impostazione di questo dispositivo, come le chiavi. */
+export interface AiPrefs {
+  id: 'ai-prefs';
+  first: 'gemini' | 'openrouter';
+}
+
 /** Chiave AES della sincronizzazione: CryptoKey non estraibile, mai la passphrase. */
 export interface SyncKeyRecord {
   id: 'sync-key';
@@ -70,7 +76,7 @@ export interface Stores {
   foods: Food;
   entries: Entry;
   weights: Weight;
-  kv: Profile | Meta | DropboxAuth | DropboxPending | SyncKeyRecord | SyncStateRecord | GeminiSettings | OpenRouterSettings;
+  kv: Profile | Meta | DropboxAuth | DropboxPending | SyncKeyRecord | SyncStateRecord | GeminiSettings | OpenRouterSettings | AiPrefs;
   cache: CacheRecord;
 }
 

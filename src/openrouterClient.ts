@@ -1,10 +1,9 @@
-// Client OpenRouter per la foto del piatto: chiave e modello in IndexedDB, chiamata.
+// Client OpenRouter per la stima del pasto (foto o descrizione): chiave e modello in IndexedDB, chiamata.
 import { postAi, readJson } from './aiHttp.js';
 import * as db from './db.js';
 import type { OpenRouterSettings } from './db.js';
 import { GeminiError, isApiKey, normalizeApiKey, parseDish } from './dishAi.js';
-import type { Dish } from './dishAi.js';
-import type { PreparedImage } from './gemini.js';
+import type { Dish, DishInput } from './dishAi.js';
 import { OPENROUTER_URL, isOrModelId, orError, orRequestBody, orResponseText, orRetryDelay } from './openrouter.js';
 
 export async function getOpenRouter(): Promise<OpenRouterSettings | undefined> {
@@ -29,17 +28,17 @@ export async function setOpenRouterModel(model: string): Promise<void> {
 
 export const clearOpenRouter = (): Promise<void> => db.deleteKey('kv', 'openrouter');
 
-function call(s: OpenRouterSettings, img: PreparedImage, hint: string, withSchema: boolean): Promise<Response> {
+function call(s: OpenRouterSettings, input: DishInput, withSchema: boolean): Promise<Response> {
   // Chiave solo nell'header Authorization. Niente HTTP-Referer o titolo dell'app: non servono.
-  return postAi(OPENROUTER_URL, { Authorization: `Bearer ${s.apiKey}` }, orRequestBody(img.base64, img.mimeType, hint, s.model, withSchema), 'OpenRouter');
+  return postAi(OPENROUTER_URL, { Authorization: `Bearer ${s.apiKey}` }, orRequestBody(input, s.model, withSchema), 'OpenRouter');
 }
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Invia, e su limite o errore temporaneo del fornitore riprova dopo una breve attesa (orRetryDelay). */
-async function send(s: OpenRouterSettings, img: PreparedImage, hint: string, withSchema: boolean): Promise<Response> {
+async function send(s: OpenRouterSettings, input: DishInput, withSchema: boolean): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
-    const res = await call(s, img, hint, withSchema);
+    const res = await call(s, input, withSchema);
     if (res.ok) return res;
     // Retry-After è leggibile solo se OpenRouter lo espone via CORS; altrimenti vale l'attesa predefinita.
     const delay = orRetryDelay(res.status, res.headers.get('retry-after'), attempt);
@@ -50,14 +49,14 @@ async function send(s: OpenRouterSettings, img: PreparedImage, hint: string, wit
 }
 
 /** Un tentativo con OpenRouter: voci validate e il modello che ha risposto (vuoto se non indicato). */
-export async function openRouterAttempt(s: OpenRouterSettings, img: PreparedImage, hint: string): Promise<{ dish: Dish; model: string }> {
-  let res = await send(s, img, hint, true);
+export async function openRouterAttempt(s: OpenRouterSettings, input: DishInput): Promise<{ dish: Dish; model: string }> {
+  let res = await send(s, input, true);
   if (!res.ok) {
     const err = orError(res.status, await res.text().catch(() => ''));
     if (!err.retryWithoutSchema) throw err;
-    res = await send(s, img, hint, false);
+    res = await send(s, input, false);
     if (!res.ok) throw orError(res.status, await res.text().catch(() => ''));
   }
-  const r = orResponseText(await readJson(res, 'OpenRouter'));
+  const r = orResponseText(await readJson(res, 'OpenRouter'), input.kind);
   return { dish: parseDish(r.text), model: r.model };
 }

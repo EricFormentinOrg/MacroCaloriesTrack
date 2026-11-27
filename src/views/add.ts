@@ -5,7 +5,7 @@ import type { FavToggle } from '../components.js';
 import { dayTitle, longDate } from '../dates.js';
 import { fmtInt } from '../format.js';
 import { mealLabel } from '../model.js';
-import type { EntryServing, Food, Meal, Nutrients, Serving, Unit } from '../model.js';
+import type { Entry, EntryServing, Food, Meal, Nutrients, Serving, Unit } from '../model.js';
 import { isBarcode, offFood, reviewNotes } from '../off.js';
 import type { OffProduct } from '../off.js';
 import { refresh } from '../nav.js';
@@ -14,7 +14,7 @@ import { rank, tokens } from '../search.js';
 import { OffError, loadCatalog, productOff, searchOff } from '../sources.js';
 import { ICONS, h, icon, toast } from '../ui.js';
 import type { Child } from '../ui.js';
-import { openDishPhoto } from './dishPhoto.js';
+import { openDishPhoto, openDishText } from './dish.js';
 import { setPendingDraft, setPendingName } from './foodEdit.js';
 import { openQtySheet } from './qtySheet.js';
 
@@ -246,6 +246,19 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
     render();
   }
 
+  /** Dopo una stima confermata: torna al diario con "Annulla" nel toast. */
+  function added(entries: Entry[] | undefined): void {
+    if (!entries?.length) return;
+    location.hash = `#/diario/${date}`;
+    toast(entries.length === 1 ? `Aggiunta 1 voce a ${mealLabel(meal)}` : `Aggiunte ${entries.length} voci a ${mealLabel(meal)}`, {
+      label: 'Annulla',
+      run: async () => {
+        await repo.deleteEntries(entries);
+        refresh();
+      },
+    });
+  }
+
   // Senza "capture": su iPhone si sceglie tra fotocamera e libreria.
   const photoInput = h('input', {
     type: 'file',
@@ -257,16 +270,7 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
       const file = photoInput.files?.[0];
       photoInput.value = '';
       if (!file) return;
-      const added = await openDishPhoto(file, date, meal);
-      if (!added?.length) return;
-      location.hash = `#/diario/${date}`;
-      toast(added.length === 1 ? `Aggiunta 1 voce a ${mealLabel(meal)}` : `Aggiunte ${added.length} voci a ${mealLabel(meal)}`, {
-        label: 'Annulla',
-        run: async () => {
-          await repo.deleteEntries(added);
-          refresh();
-        },
-      });
+      added(await openDishPhoto(file, date, meal));
     },
   });
 
@@ -298,8 +302,9 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
     h('div', { class: 'search-row' },
       search,
       h('div', { class: 'add-actions' },
-        h('a', { class: 'btn btn-secondary', href: `#/alimento/nuovo/${date}/${meal}`, onClick: () => setPendingName(query.trim()) }, 'Crea un alimento'),
         h('button', { type: 'button', class: 'btn btn-secondary', onClick: () => photoInput.click() }, icon(ICONS.camera), 'Foto del piatto'),
+        h('button', { type: 'button', class: 'btn btn-secondary', onClick: async () => added(await openDishText(date, meal)) }, icon(ICONS.text), 'Descrivi il pasto'),
+        h('a', { class: 'btn btn-secondary add-create', href: `#/alimento/nuovo/${date}/${meal}`, onClick: () => setPendingName(query.trim()) }, 'Crea un alimento'),
       ),
       photoInput,
     ),

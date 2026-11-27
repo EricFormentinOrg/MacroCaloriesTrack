@@ -1,10 +1,10 @@
-// Client Gemini per la foto del piatto: impostazioni in IndexedDB, preparazione dell'immagine, chiamata.
+// Client Gemini per la stima del pasto: impostazioni in IndexedDB, preparazione della foto, chiamata.
 import { postAi, readJson } from './aiHttp.js';
 import { toBase64 } from './crypto.js';
 import * as db from './db.js';
 import type { GeminiSettings } from './db.js';
 import { DEFAULT_MODEL, GeminiError, geminiError, isApiKey, isModelId, normalizeApiKey, parseDish, requestBody, requestUrl, responseText } from './dishAi.js';
-import type { Dish } from './dishAi.js';
+import type { Dish, DishInput } from './dishAi.js';
 
 export async function getGemini(): Promise<GeminiSettings | undefined> {
   return (await db.get('kv', 'gemini')) as GeminiSettings | undefined;
@@ -76,22 +76,22 @@ export async function prepareImage(file: Blob): Promise<PreparedImage> {
   return { blob, base64: toBase64(new Uint8Array(await blob.arrayBuffer())), mimeType: 'image/jpeg' };
 }
 
-function call(apiKey: string, model: string, img: PreparedImage, hint: string, withSchema: boolean): Promise<Response> {
+function call(apiKey: string, model: string, input: DishInput, withSchema: boolean): Promise<Response> {
   // La chiave va nell'header, mai nell'URL: non finisce in cronologia o log di rete.
-  return postAi(requestUrl(model), { 'x-goog-api-key': apiKey }, requestBody(img.base64, img.mimeType, hint, withSchema), 'Gemini');
+  return postAi(requestUrl(model), { 'x-goog-api-key': apiKey }, requestBody(input, withSchema), 'Gemini');
 }
 
 /** Un tentativo con un modello Gemini: voci stimate e già validate, o un GeminiError. */
-export async function geminiAttempt(apiKey: string, model: string, img: PreparedImage, hint: string): Promise<Dish> {
-  let res = await call(apiKey, model, img, hint, true);
+export async function geminiAttempt(apiKey: string, model: string, input: DishInput): Promise<Dish> {
+  let res = await call(apiKey, model, input, true);
   if (!res.ok) {
     const err = geminiError(res.status, await res.text().catch(() => ''));
     // Se lo schema JSON non è accettato, la risposta resta JSON e viene comunque validata qui.
     if (!err.retryWithoutSchema) throw err;
-    res = await call(apiKey, model, img, hint, false);
+    res = await call(apiKey, model, input, false);
     if (!res.ok) throw geminiError(res.status, await res.text().catch(() => ''));
   }
-  return parseDish(responseText(await readJson(res, 'Gemini')));
+  return parseDish(responseText(await readJson(res, 'Gemini'), input.kind));
 }
 
 export { DEFAULT_MODEL };

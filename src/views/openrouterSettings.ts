@@ -1,4 +1,4 @@
-// Impostazioni → OpenRouter: chiave dell'utente per la foto del piatto, come riserva di Gemini o al suo posto.
+// Impostazioni → OpenRouter: chiave dell'utente per la stima del pasto, come riserva di Gemini, al suo posto o prima di lui.
 import { GeminiError } from '../dishAi.js';
 import { OR_DEFAULT_MODEL, OR_MODELS } from '../openrouter.js';
 import { clearOpenRouter, getOpenRouter, saveOpenRouter, setOpenRouterModel } from '../openrouterClient.js';
@@ -15,16 +15,16 @@ function modelSelect(current: string, onChange: (v: string) => void): HTMLSelect
 }
 
 const role = (): HTMLElement =>
-  h('p', { class: 'muted' }, 'Usato quando Gemini non risponde, oppure da solo se non hai una chiave Gemini.');
+  h('p', { class: 'muted' }, 'Usato quando Gemini non risponde, oppure per primo se lo scegli in “Stima del pasto”, oppure da solo se non hai una chiave Gemini.');
 
 function privacy(): HTMLElement {
   return h('details', { class: 'howto' },
     h('summary', null, 'Costi, limiti e dati'),
     h('ul', { class: 'steps' },
-      h('li', null, 'Modelli gratuiti: nessun costo, al massimo 20 richieste al minuto e 50 al giorno (1000 al giorno se hai acquistato almeno 10 crediti). OpenRouter sceglie ogni volta un modello gratuito che sa leggere le foto.'),
+      h('li', null, 'Modelli gratuiti: nessun costo, al massimo 20 richieste al minuto e 50 al giorno (1000 al giorno se hai acquistato almeno 10 crediti). OpenRouter sceglie ogni volta un modello gratuito adatto alla richiesta: per le foto, uno che sa leggerle.'),
       h('li', null, 'Modelli a pagamento: paghi a consumo con il credito del tuo account OpenRouter, solo il modello che ha risposto.'),
-      h('li', null, 'La foto, ridotta e senza metadati, passa da OpenRouter al fornitore del modello. OpenRouter non conserva i contenuti, a meno che tu non attivi il log nel tuo account.'),
-      h('li', null, 'Alcuni fornitori possono usare i dati per addestrare i modelli: puoi escluderli nelle impostazioni privacy del tuo account OpenRouter, con opzioni separate per modelli gratuiti e a pagamento. Se li escludi per i gratuiti, quelli che leggono le foto diventano pochissimi e spesso al limite. Non fotografare persone o documenti.'),
+      h('li', null, 'La foto (ridotta e senza metadati) o la descrizione passa da OpenRouter al fornitore del modello. OpenRouter non conserva i contenuti, a meno che tu non attivi il log nel tuo account.'),
+      h('li', null, 'Alcuni fornitori possono usare i dati per addestrare i modelli: puoi escluderli nelle impostazioni privacy del tuo account OpenRouter, con opzioni separate per modelli gratuiti e a pagamento. Se li escludi per i gratuiti, quelli che leggono le foto diventano pochissimi e spesso al limite. Non fotografare persone o documenti e non scrivere dati personali nella descrizione.'),
     ),
   );
 }
@@ -69,7 +69,7 @@ export async function openRouterSection(): Promise<HTMLElement> {
       let model = OR_DEFAULT_MODEL;
       const save: HTMLButtonElement = h('button', { type: 'submit', class: 'btn btn-primary' }, 'Salva la chiave');
       blocks.push(
-        h('p', null, 'Un secondo servizio per la foto del piatto, quando Gemini è sovraccarico. Con i modelli gratuiti non paghi nulla.'),
+        h('p', null, 'Un secondo servizio per la stima del pasto, quando Gemini è sovraccarico, oppure al suo posto. Con i modelli gratuiti non paghi nulla.'),
         h('details', { class: 'howto' },
           h('summary', null, 'Come creare la chiave'),
           h('ol', { class: 'steps' },

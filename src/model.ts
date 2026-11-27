@@ -88,6 +88,18 @@ export interface Food extends SyncRecord {
   createdAt: number;
 }
 
+/** Voce stimata con l'AI e confermata dall'utente: da foto del piatto o da descrizione scritta. */
+export type Estimate = 'photo' | 'text';
+
+export const ESTIMATES: ReadonlyArray<{ id: Estimate; label: string }> = [
+  { id: 'photo', label: 'stima da foto' },
+  { id: 'text', label: 'stima da descrizione' },
+];
+
+export const isEstimate = (v: unknown): v is Estimate => ESTIMATES.some((e) => e.id === v);
+
+export const estimateLabel = (e: Estimate): string => ESTIMATES.find((x) => x.id === e)?.label ?? 'stima';
+
 export interface EntryServing {
   label: string;
   qty: number;
@@ -108,8 +120,11 @@ export interface Entry extends SyncRecord {
   qty: number;
   per100: Nutrients;
   serving?: EntryServing;
-  /** Valori e quantità stimati dalla foto del piatto (Gemini), confermati dall'utente. */
-  estimate?: 'photo';
+  /**
+   * Valori e quantità stimati con l'AI (Gemini o OpenRouter) e confermati dall'utente. 'text' dal 27/11/2026:
+   * le versioni precedenti dell'app rifiutano il file del mese che lo contiene finché non si aggiornano.
+   */
+  estimate?: Estimate;
   createdAt: number;
 }
 

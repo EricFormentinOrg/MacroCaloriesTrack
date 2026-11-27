@@ -38,7 +38,7 @@ const CACHE_MAX = 300;
 const productLimiter = new RateLimiter(OFF_PRODUCT_LIMIT - 3, 60_000);
 const searchLimiter = new RateLimiter(OFF_SEARCH_LIMIT - 2, 60_000);
 
-const UNAVAILABLE = 'Open Food Facts non accetta ricerche in questo momento (servizio sovraccarico o limitato agli utenti registrati). Riprova più tardi o cerca il codice a barre.';
+const UNAVAILABLE = 'Open Food Facts non accetta ricerche in questo momento: il loro servizio è sovraccarico o limitato agli utenti registrati, non è un problema dell’app. Riprova tra qualche minuto, cerca il codice a barre o crea l’alimento dall’etichetta.';
 
 async function getJson(url: string, limiter: RateLimiter): Promise<unknown> {
   if (!navigator.onLine) throw new OffError('Sei offline: Open Food Facts non è raggiungibile.');
@@ -90,13 +90,17 @@ export interface OffResult {
   stale?: string;
 }
 
-/** Cache prima, poi rete; se la rete fallisce, una copia scaduta è meglio di niente. */
-async function withCache<T>(key: string, ttl: number, load: () => Promise<T>): Promise<{ data: T; stale?: string }> {
+/**
+ * Cache prima, poi rete; se la rete fallisce, una copia scaduta è meglio di niente.
+ * `keep` decide se il risultato va in cache: un risultato vuoto no, perché un prodotto non trovato oggi
+ * può comparire domani, e una risposta vuota di un servizio in difficoltà non deve restare per giorni.
+ */
+async function withCache<T>(key: string, ttl: number, load: () => Promise<T>, keep: (data: T) => boolean): Promise<{ data: T; stale?: string }> {
   const c = await cached<T>(key, ttl);
   if (c?.fresh) return { data: c.data };
   try {
     const data = await load();
-    if (data !== null) await store(key, data); // un prodotto non trovato oggi può comparire domani
+    if (keep(data)) await store(key, data);
     return { data };
   } catch (e) {
     if (c && e instanceof OffError) return { data: c.data, stale: `${e.message} Risultati salvati in precedenza.` };
@@ -110,12 +114,12 @@ export async function searchOff(query: string): Promise<OffResult> {
     // Ogni prodotto trovato finisce anche nella cache per codice.
     for (const p of res.products) await db.put('cache', { key: `p:${p.code}`, at: Date.now(), data: p });
     return res;
-  });
+  }, (res) => res.products.length > 0);
   return { ...r.data, stale: r.stale };
 }
 
 export async function productOff(code: string): Promise<OffResult> {
-  const r = await withCache(`p:${code.trim()}`, PRODUCT_TTL, async () => parseProductResponse(await getJson(productUrl(code), productLimiter)));
+  const r = await withCache(`p:${code.trim()}`, PRODUCT_TTL, async () => parseProductResponse(await getJson(productUrl(code), productLimiter)), (p) => p !== null);
   const products = r.data ? [r.data] : [];
   return { products, count: products.length, stale: r.stale };
 }

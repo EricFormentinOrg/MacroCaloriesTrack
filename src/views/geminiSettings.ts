@@ -1,4 +1,4 @@
-// Impostazioni → Foto del piatto: chiave Gemini dell'utente, modello, note sulla privacy.
+// Impostazioni → Gemini: chiave dell'utente per la stima del pasto (foto o descrizione), modello, note sulla privacy.
 import { FALLBACK_MODEL, GeminiError, MODELS, modelLabel } from '../dishAi.js';
 import { DEFAULT_MODEL, clearGemini, getGemini, saveGemini, setGeminiModel } from '../gemini.js';
 import { confirmSheet, field, h, toast } from '../ui.js';
@@ -20,8 +20,8 @@ function privacy(): HTMLElement {
   return h('details', { class: 'howto' },
     h('summary', null, 'Cosa viene inviato e a chi'),
     h('ul', { class: 'steps' },
-      h('li', null, 'Solo la foto del piatto e l’eventuale descrizione, direttamente dal telefono a Google. Prima dell’invio la foto viene ridotta e ripulita dei metadati, compresa la posizione GPS. L’app non la conserva.'),
-      h('li', null, 'Con una chiave gratuita Google può usare foto e risposte per migliorare i suoi prodotti e farle leggere a revisori umani. Con la fatturazione attiva sul progetto Google Cloud non le usa per questo. Non fotografare persone o documenti.'),
+      h('li', null, 'Solo la foto del piatto con l’eventuale indicazione, oppure la descrizione scritta del pasto, direttamente dal telefono a Google. Prima dell’invio la foto viene ridotta e ripulita dei metadati, compresa la posizione GPS. L’app non la conserva.'),
+      h('li', null, 'Con una chiave gratuita Google può usare foto, testi e risposte per migliorare i suoi prodotti e farli leggere a revisori umani. Con la fatturazione attiva sul progetto Google Cloud non li usa per questo. Non fotografare persone o documenti e non scrivere dati personali nella descrizione.'),
       h('li', null, 'Le stime sono approssimative, soprattutto su quantità e condimenti: controlla sempre prima di aggiungere.'),
     ),
   );
@@ -34,7 +34,7 @@ export async function geminiSection(): Promise<HTMLElement> {
   async function render(): Promise<void> {
     const s = await getGemini();
     error.textContent = '';
-    const blocks: Node[] = [h('h2', null, 'Foto del piatto')];
+    const blocks: Node[] = [h('h2', null, 'Gemini')];
     if (s) {
       blocks.push(
         h('p', null, `Chiave Gemini salvata su questo dispositivo, che termina con “…${s.apiKey.slice(-4)}”.`),
@@ -67,7 +67,7 @@ export async function geminiSection(): Promise<HTMLElement> {
       let model = DEFAULT_MODEL;
       const save: HTMLButtonElement = h('button', { type: 'submit', class: 'btn btn-primary' }, 'Salva la chiave');
       blocks.push(
-        h('p', null, 'Fotografa il piatto e Gemini stima alimenti, quantità e valori: tu controlli e aggiungi al diario. Serve una tua chiave Gemini, oppure una chiave OpenRouter (sezione qui sotto).'),
+        h('p', null, 'Una tua chiave Gemini per la foto del piatto e la descrizione del pasto. In alternativa, o come riserva, una chiave OpenRouter (sezione qui sotto).'),
         h('details', { class: 'howto' },
           h('summary', null, 'Come creare la chiave'),
           h('ol', { class: 'steps' },
