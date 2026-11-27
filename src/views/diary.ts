@@ -1,7 +1,7 @@
 import { macroMini } from '../components.js';
 import { addDays, dayTitle, isISODate, longDate, plainDate, todayISO } from '../dates.js';
 import { fmt1, fmtG, fmtInt, fmtQty } from '../format.js';
-import { MEALS } from '../model.js';
+import { MEALS, estimateLabel } from '../model.js';
 import type { Entry, Meal, Nutrients, Profile, Targets, Weight } from '../model.js';
 import { refresh } from '../nav.js';
 import { computePlan, entryNutrients, sum } from '../nutrition.js';
@@ -214,7 +214,7 @@ function entryRow(e: Entry): HTMLElement {
     h('button', { type: 'button', class: 'row', onClick: () => editEntry(e) },
       h('span', { class: 'row-main' },
         h('span', { class: 'row-title' }, e.name),
-        h('span', { class: 'row-sub' }, [e.brand, fmtQty(e), e.estimate === 'photo' ? 'stima da foto' : undefined].filter(Boolean).join(', ')),
+        h('span', { class: 'row-sub' }, [e.brand, fmtQty(e), e.estimate ? estimateLabel(e.estimate) : undefined].filter(Boolean).join(', ')),
       ),
       h('span', { class: 'row-side' },
         h('span', { class: 'row-kcal' }, `${fmtInt(n.kcal)} kcal`),

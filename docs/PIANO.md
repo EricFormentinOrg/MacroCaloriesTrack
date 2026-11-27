@@ -1,6 +1,6 @@
 # MacroCaloriesTrack: piano di implementazione
 
-Ultimo aggiornamento: 11 novembre 2026.
+Ultimo aggiornamento: 27 novembre 2026.
 
 ## Obiettivo
 
@@ -78,7 +78,7 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
   - generato da `scripts/import-ch.mjs` dal file Excel ufficiale; "tr." e "<x" valgono 0, "nd" resta vuoto;
   - validato all'avvio (`src/catalog.ts`), ricerca senza accenti su nome, sinonimi e categoria.
 - [x] Open Food Facts (`src/off.ts`, `src/sources.ts`):
-  - ricerca testuale con `/cgi/search.pl` su richiesta esplicita (pulsante), ricerca per codice a barre con `/api/v2/product`;
+  - ricerca testuale con `/cgi/search.pl` su richiesta esplicita (pulsante), dal 27/11/2026 con Search-a-licious come riserva; ricerca per codice a barre con `/api/v2/product`;
   - risposte validate campo per campo, testo ripulito da caratteri di controllo e invisibili;
   - limiti lato client sotto quelli documentati (12 letture e 8 ricerche al minuto), timeout di 12 secondi;
   - cache in IndexedDB (store `cache`, database versione 2): ricerche 7 giorni, prodotti 30, al massimo 300 voci; senza rete usa la copia scaduta; non entra nel backup; "Cancella tutti i dati" la svuota;
@@ -124,6 +124,13 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
     - Da verificare: qualità delle stime su foto vere di piatti, tempi su iPhone.
     - Corretto un errore precedente nel README: diceva che la CSP permetteva solo Open Food Facts, mentre c'erano già Dropbox e Gemini.
 
+- [x] Descrizione del pasto (27/11/2026, chiesta da Eric): "Descrivi il pasto" in Aggiungi invia il testo (al massimo 1000 caratteri, ripulito da caratteri invisibili) a Gemini o OpenRouter con lo stesso schema, la stessa validazione e lo stesso ordine dei tentativi della foto. Prompt dedicato: le quantità scritte dall'utente prevalgono, quelle mancanti sono porzioni tipiche con confidenza media o bassa, niente doppi condimenti per i piatti composti. Richiesta senza immagine (Gemini: una sola parte di testo; OpenRouter: solo `text`).
+  - Le voci hanno `estimate: 'text'` e nel diario riportano "stima da descrizione". Cambio del modello dati deciso con Eric: le versioni precedenti dell'app rifiutano il file del mese che contiene una voce `'text'` (validazione rigorosa di `estimate`), quindi su un dispositivo non aggiornato la sincronizzazione segnala un errore finché l'app non si aggiorna (alla riapertura online, "Ricarica").
+  - Modulo della vista rinominato da `dishPhoto.ts` a `dish.ts`: un solo foglio di revisione per foto e descrizione, con "Modifica la descrizione" (o "le indicazioni") per tornare al testo e rifare la stima.
+- [x] Valori per 100 g modificabili nel foglio di revisione (27/11/2026, deciso con Eric: per 100 g, non totali della porzione), per foto e descrizione. Ogni voce ha "Valori per 100 g": i campi partono dai valori in uso (banca dati o stima); una correzione li rende "Valori corretti da te", ricalcola totale e avvisi di coerenza. Energia e tre macronutrienti obbligatori, massimo 1000 kcal e 100 g (`editedValues` in `src/dishAi.ts`, testata); con valori non validi "Aggiungi" resta disattivato. Gli avvisi di coerenza ora riguardano solo i valori stimati o corretti: prima comparivano quelli della stima anche quando era scelta la banca dati, e sui valori della banca dati l'avviso kcal/macro dell'alcol sarebbe un falso allarme.
+- [x] Servizio da provare per primo (27/11/2026, chiesto da Eric): Impostazioni → Stima del pasto → "Prova per primo" Gemini (predefinito) o OpenRouter, salvato in IndexedDB (`kv`: `ai-prefs`, mai nel backup né su Dropbox). Con OpenRouter per primo l'ordine è OpenRouter, Gemini scelto, Flash-Lite; con una sola chiave conta solo quella. La sezione Gemini si chiama ora "Gemini" (prima "Foto del piatto").
+  - Da verificare dal vivo: che `openrouter/free` scelga un modello adatto anche per le richieste di solo testo (dedotto dalla documentazione del router, non provato); qualità delle stime da descrizione.
+
 ### Fase 5: storico e portabilità (completata)
 - [x] Export JSON completo, con i tombstone.
 - [x] Import con validazione rigorosa: file intero rifiutato se un record non è valido, campi sconosciuti scartati, anteprima, poi "Unisci" o "Sostituisci".
@@ -142,7 +149,19 @@ Diario alimentare personale sul modello di FatSecret: registrazione per pasto (c
 - **OCR**: su confezioni curve, lucide o con testo piccolo le correzioni saranno frequenti. La Fase 0 dirà quanto.
 - **Passphrase**: se la perdi, i dati su Dropbox sono irrecuperabili. L'export JSON in chiaro è l'unico paracadute.
 - **Open Food Facts**: le ricerche rivelano al loro server cosa cerchi. I valori sono inseriti da volontari e vanno controllati.
-- **Ricerca testuale su Open Food Facts**: l'11 novembre 2026 `/cgi/search.pl` rispondeva quasi sempre 503 ("sovraccarico o non disponibile agli utenti anonimi"), senza header CORS. La ricerca per codice a barre funzionava. Search-a-licious (`search.openfoodfacts.org`) risponde, ma senza `Access-Control-Allow-Origin` per origini esterne: dal browser non è usabile.
+- **Ricerca testuale su Open Food Facts**: l'11 novembre 2026 `/cgi/search.pl` rispondeva quasi sempre 503 ("sovraccarico o non disponibile agli utenti anonimi"), senza header CORS. La ricerca per codice a barre funzionava. Search-a-licious (`search.openfoodfacts.org`) risponde, ma senza `Access-Control-Allow-Origin` per origini esterne: dal browser non è usabile. Superato: il 27/11/2026 Search-a-licious rimanda l'origine dell'app ed è usato come riserva (sotto).
+  - Diagnosi del 27/11/2026, dopo la segnalazione di Eric ("Nessuna risposta utilizzabile da Open Food Facts" a ogni ricerca per nome). La causa è il servizio di OFF, non l'app: il monitor ufficiale di OFF (repository `openfoodfacts/openfoodfacts-upptime`, `history/summary.json`, letto il 27/11/2026) dà a "Search API v2", cioè `cgi/search.pl?...&json=1` (lo stesso endpoint dell'app), una disponibilità del 54,10% nelle ultime 24 ore, 87,10% nell'ultima settimana e 97,03% nell'ultimo mese. Nello stesso monitor la API prodotto (codice a barre) e Search-a-licious sono al 100% su giorno e settimana. Incidenti "Search API v2 is down" (HTTP 503) aperti dal monitor: 127 a maggio, 319 ad agosto, 602 a ottobre, 619 dal 1° al 27 novembre. Il 503 arriva senza header CORS: il browser lo vede come errore di rete, da cui il messaggio. Da questa sessione OFF non era raggiungibile (rete dell'ambiente), quindi niente prova dal vivo.
+  - Ipotesi non verificata: l'header `X-User-Agent` rende la richiesta "non semplice" e aggiunge un preflight OPTIONS. Sono due richieste da far riuscire invece di una, e forse contano entrambe nel limite di 10 al minuto.
+  - Corretto il 27/11/2026: un risultato vuoto finiva in cache per 7 giorni; ora non va in cache (né per la ricerca né per il codice a barre). Messaggio d'errore più chiaro: dice che il problema è del servizio e propone codice a barre o etichetta.
+  - [x] Ricerca di riserva con Search-a-licious (27/11/2026). Verificato dal vivo, con i domini aperti nella rete dell'ambiente:
+    - `cgi/search.pl` rispondeva 503 (pagina "high demand, or not available to anonymous users", senza header CORS) a 3 richieste su 4, compreso il preflight OPTIONS; quando risponde 200 manda `Access-Control-Allow-Origin: *`, permette `X-User-Agent` e un `Access-Control-Max-Age` di 20 giorni. L'ipotesi sul preflight resta secondaria: il problema è il 503.
+    - Search-a-licious (`search.openfoodfacts.org/search`) rimanda l'origine dell'app in `Access-Control-Allow-Origin`, anche sul preflight con `X-User-Agent` e sugli errori 400 e 500. Indice aggiornato: prodotti modificati il 23/11/2026 indicizzati il 24/11/2026; falsa l'affermazione di un progetto terzo su un indice fermo al dicembre 2024.
+    - I documenti hanno `code`, `product_name(_it)`, `brands` come elenco (a volte con prefisso "xx:"), `quantity`, `product_quantity_unit`, `serving_quantity_unit`, ma i nutrienti solo in 13 risultati su 192 (8 ricerche italiane), anche quando la scheda prodotto li ha.
+    - Query in sintassi Lucene: ":", virgolette, parentesi o "AND" finale danno 400; tutte le parole devono comparire nel nome ("Nutella 750g" dà 0 risultati).
+    - Implementato: se `search.pl` non risponde (rete, CORS, 429, 5xx, pagina HTML, tempo scaduto) l'app cerca su Search-a-licious con la query ripulita (`salQuery`) e `langs=it`; per 5 minuti va dritta alla riserva. I risultati della riserva mostrano marchio e "valori alla scelta"; al tocco i valori arrivano dalla scheda prodotto (`/api/v2/product`, in cache 30 giorni), poi il flusso è quello solito. Risultati della riserva in cache 1 ora, non per codice. Se falliscono entrambe resta il messaggio della ricerca principale. `connect-src` include `https://search.openfoodfacts.org`.
+    - Prova dal vivo in Chromium, app in locale e servizi reali: "yogurt greco" (principale in 503, riserva con 24 risultati, valori dalla scheda: 58 kcal), "passata di pomodoro" e "coca cola" (principale in pausa, riserva diretta; Coca Cola in ml con porzione da 330 ml). Nessuna violazione CSP.
+    - Corretto: una confezione senza unità ("33") con porzione in ml risultava in grammi; ora vale l'unità della porzione.
+    - Non verificato: il limite di frequenza di Search-a-licious (l'app ne fa al massimo 8 al minuto, come per `search.pl`); comportamento su Safari iOS.
 - **Banca dati svizzera**: nomi in italiano svizzero ("pane bigio", "Olio d'oliva" senza "extravergine"), qualche refuso della fonte lasciato com'è. I valori sono per 100 g anche per le bevande. 24 alimenti, quasi tutti alcolici, fanno scattare l'avviso kcal/macro dell'editor perché l'energia dell'alcol non è nei macronutrienti.
 - **iPhone**: l'app va installata sulla schermata Home e va concessa l'archiviazione persistente, altrimenti Safari può cancellare i dati dopo giorni di inattività.
 - **Repository pubblico**: con il piano GitHub gratuito, Pages richiede un repository pubblico. Il codice è visibile, i dati no.

@@ -5,7 +5,7 @@ import type { FavToggle } from '../components.js';
 import { dayTitle, longDate } from '../dates.js';
 import { fmtInt } from '../format.js';
 import { mealLabel } from '../model.js';
-import type { EntryServing, Food, Meal, Nutrients, Serving, Unit } from '../model.js';
+import type { Entry, EntryServing, Food, Meal, Nutrients, Serving, Unit } from '../model.js';
 import { isBarcode, offFood, reviewNotes } from '../off.js';
 import type { OffProduct } from '../off.js';
 import { refresh } from '../nav.js';
@@ -14,14 +14,14 @@ import { rank, tokens } from '../search.js';
 import { OffError, loadCatalog, productOff, searchOff } from '../sources.js';
 import { ICONS, h, icon, toast } from '../ui.js';
 import type { Child } from '../ui.js';
-import { openDishPhoto } from './dishPhoto.js';
+import { openDishPhoto, openDishText } from './dish.js';
 import { setPendingDraft, setPendingName } from './foodEdit.js';
 import { openQtySheet } from './qtySheet.js';
 
 type OffState =
   | { status: 'idle' }
   | { status: 'loading'; query: string }
-  | { status: 'done'; query: string; products: OffProduct[]; count: number; note?: string }
+  | { status: 'done'; query: string; products: OffProduct[]; count: number; note?: string; alt?: boolean }
   | { status: 'error'; query: string; message: string };
 
 export async function addView(date: string, meal: Meal, openFoodId?: string): Promise<HTMLElement> {
@@ -100,14 +100,18 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
   }
 
   function offRow(p: OffProduct): HTMLElement {
-    const notes = reviewNotes(p);
-    const sub = [p.brand, notes.length ? 'da controllare' : per100Label(p.per100.kcal, p.unit)].filter(Boolean).join(', ');
+    // Dalla ricerca di riserva i valori arrivano solo con la scheda prodotto, al tocco.
+    const notes = p.partial ? [] : reviewNotes(p);
+    const detail = p.partial
+      ? (p.complete ? per100Label(p.per100.kcal, p.unit) : 'valori alla scelta')
+      : notes.length ? 'da controllare' : per100Label(p.per100.kcal, p.unit);
+    const sub = [p.brand, detail].filter(Boolean).join(', ');
     return itemRow({
       title: p.name,
       sub,
       per100: p.per100,
       onPick: () => void pickOff(p),
-      fav: notes.length ? undefined : {
+      fav: notes.length || p.partial ? undefined : {
         on: false,
         toggle: async () => {
           const f = await repo.adoptFood({ ...offFood(p), per100: p.per100 as Nutrients, favorite: true });
@@ -135,6 +139,7 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
     const more = off.count > off.products.length ? ` Mostrati i primi ${fmtInt(off.products.length)} di ${fmtInt(off.count)}: aggiungi parole per restringere.` : '';
     return group('off', 'Open Food Facts',
       off.note ? h('p', { class: 'muted' }, off.note) : null,
+      off.alt ? h('p', { class: 'muted off-alt' }, 'La ricerca principale di Open Food Facts non risponde: risultati dal loro motore di ricerca alternativo. I valori arrivano quando scegli un prodotto.') : null,
       ranked.length
         ? list(ranked.map(offRow))
         : h('p', { class: 'empty' }, off.products.length ? 'I prodotti trovati sono già tra i tuoi alimenti.' : 'Nessun prodotto trovato.'),
@@ -149,7 +154,7 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
     render();
     try {
       const r = isBarcode(q) ? await productOff(q) : await searchOff(q);
-      off = { status: 'done', query: q, products: r.products, count: r.count, note: r.stale };
+      off = { status: 'done', query: q, products: r.products, count: r.count, note: r.stale, alt: r.alt };
     } catch (e) {
       off = { status: 'error', query: q, message: e instanceof OffError ? e.message : 'Ricerca su Open Food Facts non riuscita.' };
       if (!(e instanceof OffError)) console.error(e);
@@ -226,9 +231,25 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
     render();
   }
 
-  async function pickOff(p: OffProduct): Promise<void> {
-    const own = adopted('off', p.code);
+  async function pickOff(found: OffProduct): Promise<void> {
+    const own = adopted('off', found.code);
     if (own) return pickFood(own);
+    let p = found;
+    if (p.partial) {
+      // Risultato della ricerca di riserva: valori dalla scheda prodotto (in cache per 30 giorni).
+      try {
+        const r = await productOff(p.code);
+        if (!r.products[0]) {
+          toast('Prodotto non più presente su Open Food Facts.');
+          return;
+        }
+        p = r.products[0];
+      } catch (e) {
+        toast(e instanceof OffError ? e.message : 'Valori del prodotto non disponibili: riprova.');
+        if (!(e instanceof OffError)) console.error(e);
+        return;
+      }
+    }
     const base = offFood(p);
     const notes = reviewNotes(p);
     if (notes.length) {
@@ -246,6 +267,19 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
     render();
   }
 
+  /** Dopo una stima confermata: torna al diario con "Annulla" nel toast. */
+  function added(entries: Entry[] | undefined): void {
+    if (!entries?.length) return;
+    location.hash = `#/diario/${date}`;
+    toast(entries.length === 1 ? `Aggiunta 1 voce a ${mealLabel(meal)}` : `Aggiunte ${entries.length} voci a ${mealLabel(meal)}`, {
+      label: 'Annulla',
+      run: async () => {
+        await repo.deleteEntries(entries);
+        refresh();
+      },
+    });
+  }
+
   // Senza "capture": su iPhone si sceglie tra fotocamera e libreria.
   const photoInput = h('input', {
     type: 'file',
@@ -257,16 +291,7 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
       const file = photoInput.files?.[0];
       photoInput.value = '';
       if (!file) return;
-      const added = await openDishPhoto(file, date, meal);
-      if (!added?.length) return;
-      location.hash = `#/diario/${date}`;
-      toast(added.length === 1 ? `Aggiunta 1 voce a ${mealLabel(meal)}` : `Aggiunte ${added.length} voci a ${mealLabel(meal)}`, {
-        label: 'Annulla',
-        run: async () => {
-          await repo.deleteEntries(added);
-          refresh();
-        },
-      });
+      added(await openDishPhoto(file, date, meal));
     },
   });
 
@@ -298,8 +323,9 @@ export async function addView(date: string, meal: Meal, openFoodId?: string): Pr
     h('div', { class: 'search-row' },
       search,
       h('div', { class: 'add-actions' },
-        h('a', { class: 'btn btn-secondary', href: `#/alimento/nuovo/${date}/${meal}`, onClick: () => setPendingName(query.trim()) }, 'Crea un alimento'),
         h('button', { type: 'button', class: 'btn btn-secondary', onClick: () => photoInput.click() }, icon(ICONS.camera), 'Foto del piatto'),
+        h('button', { type: 'button', class: 'btn btn-secondary', onClick: async () => added(await openDishText(date, meal)) }, icon(ICONS.text), 'Descrivi il pasto'),
+        h('a', { class: 'btn btn-secondary add-create', href: `#/alimento/nuovo/${date}/${meal}`, onClick: () => setPendingName(query.trim()) }, 'Crea un alimento'),
       ),
       photoInput,
     ),

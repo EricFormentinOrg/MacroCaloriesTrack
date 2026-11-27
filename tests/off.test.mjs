@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RateLimiter, isBarcode, offFood, parseOffProduct, parseProductResponse, parseSearchResponse, productUrl, reviewNotes, searchUrl, userAgent } from '../dist/js/off.js';
+import { RateLimiter, isBarcode, offFood, parseOffProduct, parseProductResponse, parseSearchResponse, productUrl, reviewNotes, searchUrl, userAgent, parseSalResponse, salQuery, salSearchUrl } from '../dist/js/off.js';
 
 // Prodotti sintetici con la struttura delle risposte reali (campi verificati su world.openfoodfacts.org).
 const pasta = {
@@ -102,4 +102,52 @@ test('limite di frequenza', () => {
   t = 60_000;
   assert.equal(lim.take(), 0);
   assert.equal(lim.take(), 10_000);
+});
+
+test('Search-a-licious: query ripulita dalla sintassi Lucene, URL, campi', () => {
+  // Verificato dal vivo il 27/11/2026: "yogurt: greco", '"pasta', "pasta AND", "pasta (fresca" davano 400.
+  assert.equal(salQuery('yogurt: greco'), 'yogurt greco');
+  assert.equal(salQuery('"pasta'), 'pasta');
+  assert.equal(salQuery('Pasta AND'), 'pasta and', 'operatori in minuscolo: restano parole');
+  assert.equal(salQuery('pasta (fresca'), 'pasta fresca');
+  assert.equal(salQuery('coca-cola 1/2 l*'), 'coca cola 1 2 l');
+  assert.equal(salQuery("caffè d'orzo"), "caffè d'orzo", 'apostrofo e accenti restano');
+  assert.equal(salQuery(' :: '), '');
+  const u = new URL(salSearchUrl('Yogurt: Greco'));
+  assert.equal(u.origin, 'https://search.openfoodfacts.org');
+  assert.equal(u.pathname, '/search');
+  assert.equal(u.searchParams.get('q'), 'yogurt greco');
+  assert.equal(u.searchParams.get('langs'), 'it');
+  assert.equal(u.searchParams.get('page_size'), '24');
+  assert.match(u.searchParams.get('fields'), /^code,product_name,.*nutriments/);
+  assert.throws(() => salSearchUrl('***'));
+});
+
+test('Search-a-licious: risultati validati, marchi senza prefisso, tutti da completare', () => {
+  // Forma delle risposte vere del 27/11/2026 (campi ridotti).
+  const res = parseSalResponse({
+    hits: [
+      { code: '8004690611500', product_name: 'Spaghetti n°15 (Le Integrali)', product_name_it: 'Spaghetti n°15 (Le Integrali)', brands: ['xx:La Molisana'], quantity: '500 gram', product_quantity_unit: 'g', serving_quantity: 100.0, nutriments: null },
+      { code: '7709665301769', product_name: 'Nutella', product_name_it: null, brands: ['nutella', 'ferrero'], serving_quantity: 25.0,
+        nutriments: { 'energy-kcal_100g': 520.0, fat_100g: 32.0, 'saturated-fat_100g': 10.0, carbohydrates_100g: 56.0, sugars_100g: 56.0, proteins_100g: 8.0, fiber_100g: 4.0, salt_100g: 0.1 } },
+      { code: '5000112557664', product_name: 'Coca Cola', brands: ['xx:Coca-Cola'], quantity: '33', serving_quantity: 330.0, serving_quantity_unit: 'ml' },
+      { code: '8004690611500', product_name: 'doppione' },
+      { code: 'abc', product_name: 'codice non valido' },
+      'testo',
+    ],
+    count: 123, page: 1, page_size: 24, page_count: 6, took: 7, timed_out: false, is_count_exact: true,
+  });
+  assert.equal(res.count, 123);
+  assert.deepEqual(res.products.map((p) => p.code), ['8004690611500', '7709665301769', '5000112557664']);
+  assert.ok(res.products.every((p) => p.partial === true), 'valori sempre dalla scheda prodotto');
+  assert.equal(res.products[0].brand, 'La Molisana', 'prefisso di lingua tolto');
+  assert.equal(res.products[0].complete, false);
+  assert.equal(res.products[1].brand, 'nutella');
+  assert.equal(res.products[1].complete, true);
+  assert.equal(res.products[1].per100.kcal, 520);
+  assert.equal(res.products[2].unit, 'ml', 'quantità senza unità: vale quella della porzione');
+  assert.equal(res.products[0].unit, 'g');
+  assert.throws(() => parseSalResponse({ products: [] }), /non valida/, 'forma di search.pl, non di Search-a-licious');
+  assert.throws(() => parseSalResponse({ hits: new Array(201).fill({}) }), /non valida/);
+  assert.throws(() => parseSalResponse('<html>'), /non valida/);
 });

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCatalog } from '../dist/js/catalog.js';
-import { DEFAULT_MODEL, FALLBACK_MODEL, GeminiError, canTryNext, dishPlan, geminiError, isApiKey, matchCatalog, modelLabel, normalizeApiKey, parseDish, prompt, requestBody, requestUrl, responseText, totalKcal } from '../dist/js/dishAi.js';
+import { DEFAULT_MODEL, FALLBACK_MODEL, GeminiError, TEXT_MAX, canTryNext, dishPlan, editedValues, geminiError, isAiProvider, isApiKey, matchCatalog, modelLabel, normalizeApiKey, parseDish, prompt, promptFor, requestBody, requestUrl, responseText, textPrompt, totalKcal } from '../dist/js/dishAi.js';
+
+const photo = (hint = '') => ({ kind: 'photo', base64: 'QUJD', mimeType: 'image/jpeg', hint });
 
 const geminiResponse = (text, extra = {}) => ({ candidates: [{ content: { parts: [{ text }], role: 'model' }, finishReason: 'STOP' }], usageMetadata: {}, ...extra });
 const dish = {
@@ -18,15 +20,16 @@ test('richiesta: URL senza chiave, immagine inline, JSON con schema', () => {
   assert.equal(url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent');
   assert.doesNotMatch(url, /key=/, 'la chiave va nell’header, mai nell’URL');
   assert.throws(() => requestUrl('../../x'));
-  const b = requestBody('QUJD', 'image/jpeg', '  porzione abbondante  ');
+  const b = requestBody(photo('  porzione abbondante  '));
   assert.equal(b.contents[0].parts[1].inline_data.mime_type, 'image/jpeg');
   assert.equal(b.contents[0].parts[1].inline_data.data, 'QUJD');
   assert.equal(b.generationConfig.responseMimeType, 'application/json');
   assert.ok(b.generationConfig.responseJsonSchema.properties.items);
   assert.match(b.contents[0].parts[0].text, /Indicazioni dell’utente: porzione abbondante$/);
-  assert.equal(requestBody('QUJD', 'image/jpeg', '', false).generationConfig.responseJsonSchema, undefined);
+  assert.equal(requestBody(photo(), false).generationConfig.responseJsonSchema, undefined);
   assert.doesNotMatch(prompt(''), /Indicazioni/);
   assert.equal(prompt('x'.repeat(1000)).length < 1400, true, 'indicazioni limitate');
+  assert.doesNotMatch(prompt('pasta\u0000\u202Eal\npomodoro'), /[\u0000\u202E\n]/, 'niente caratteri di controllo o invisibili');
   assert.equal(isApiKey('AIzaSyA-abcdefghijklmnopqrstuvwxyz0123'), true, 'chiave standard');
   assert.equal(isApiKey('AQ.Ab8RN6Lx9-fake_auth.key/with+other=chars_0123456789'), true, 'formato diverso: accettato, lo verifica Google');
   assert.equal(isApiKey('x'.repeat(300)), true);
@@ -36,6 +39,23 @@ test('richiesta: URL senza chiave, immagine inline, JSON con schema', () => {
   assert.equal(normalizeApiKey(['  "AIzaSyA-abc', 'def"  '].join('\n')), 'AIzaSyA-abcdef', 'spazi, a capo e virgolette incollati per errore');
 });
 
+test('descrizione: solo testo, quantità dell’utente, lunghezza limitata', () => {
+  const input = { kind: 'text', text: '  2 fette di pizza margherita\ne una birra media  ' };
+  const b = requestBody(input);
+  assert.equal(b.contents[0].parts.length, 1, 'nessuna immagine');
+  const t = b.contents[0].parts[0].text;
+  assert.equal(t, promptFor(input));
+  assert.match(t, /L’utente descrive cosa ha mangiato/);
+  assert.match(t, /usa quella scritta dall’utente/);
+  assert.match(t, /Descrizione dell’utente: «2 fette di pizza margherita e una birra media»$/);
+  assert.doesNotMatch(t, /Nella foto/);
+  assert.ok(b.generationConfig.responseJsonSchema);
+  assert.equal(TEXT_MAX, 1000);
+  const long = textPrompt('a'.repeat(5000));
+  assert.equal((long.match(/a{2,}/g) ?? []).reduce((n, m) => Math.max(n, m.length), 0), TEXT_MAX, 'descrizione tagliata');
+  assert.match(promptFor(photo('x')), /Nella foto/);
+});
+
 test('risposta: testo, rifiuti e troncamenti', () => {
   assert.equal(responseText(geminiResponse('{"items":[]}')), '{"items":[]}');
   const withThought = { candidates: [{ content: { parts: [{ text: 'ragionamento', thought: true }, { text: '{"items":[]}' }] }, finishReason: 'STOP' }] };
@@ -43,6 +63,8 @@ test('risposta: testo, rifiuti e troncamenti', () => {
   assert.throws(() => responseText({ promptFeedback: { blockReason: 'SAFETY' } }), /rifiutato/);
   assert.throws(() => responseText({ candidates: [{ finishReason: 'SAFETY', content: { parts: [] } }] }), /rifiutato/);
   assert.throws(() => responseText({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"ite' }] } }] }), /troncata/);
+  assert.throws(() => responseText({ promptFeedback: { blockReason: 'SAFETY' } }, 'text'), /rifiutato la descrizione/);
+  assert.throws(() => responseText({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [] } }] }, 'text'), /meno alimenti/);
   assert.throws(() => responseText({ candidates: [] }), GeminiError);
   assert.throws(() => responseText('<html>'), GeminiError);
 });
@@ -73,6 +95,13 @@ test('tentativi: ordine e passaggio al successivo solo per errori del servizio o
   assert.deepEqual(dishPlan(DEFAULT_MODEL, 'openrouter/free'), [g(DEFAULT_MODEL), g(FALLBACK_MODEL), or]);
   assert.deepEqual(dishPlan(undefined, 'openrouter/free'), [or], 'solo OpenRouter');
   assert.deepEqual(dishPlan(), []);
+  assert.deepEqual(dishPlan(DEFAULT_MODEL, 'openrouter/free', 'gemini'), [g(DEFAULT_MODEL), g(FALLBACK_MODEL), or], 'Gemini per primo: predefinito');
+  assert.deepEqual(dishPlan(DEFAULT_MODEL, 'openrouter/free', 'openrouter'), [or, g(DEFAULT_MODEL), g(FALLBACK_MODEL)], 'OpenRouter per primo');
+  assert.deepEqual(dishPlan(DEFAULT_MODEL, undefined, 'openrouter'), [g(DEFAULT_MODEL), g(FALLBACK_MODEL)], 'senza chiave OpenRouter conta solo Gemini');
+  assert.deepEqual(dishPlan(undefined, 'openrouter/free', 'gemini'), [or]);
+  assert.equal(isAiProvider('openrouter'), true);
+  assert.equal(isAiProvider('claude'), false);
+  assert.equal(isAiProvider(undefined), false);
   for (const status of [404, 429, 500, 503, 504]) assert.equal(canTryNext(geminiError(status, '')), true, `stato ${status}`);
   assert.equal(canTryNext(new GeminiError('rete', { tryOtherModel: true })), true, 'rete o tempo scaduto');
   assert.equal(canTryNext(geminiError(400, body('API key not valid. Please pass a valid API key.'))), false, 'chiave sbagliata: nessun ripiego');
@@ -128,4 +157,15 @@ test('abbinamento con la banca dati: solo se il nome corrisponde', () => {
   assert.equal(matchCatalog('lasagne alla bolognese', cat.items), undefined, 'piatto composto: resta la stima');
   assert.equal(matchCatalog('riso', cat.items)?.item.id, '900', 'parola singola: il nome più corto');
   assert.equal(matchCatalog('con', cat.items), undefined);
+});
+
+test('valori corretti nel foglio di revisione', () => {
+  const ok = editedValues({ kcal: '266', fat: '10,4', satFat: '4,5', carbs: '33', sugars: '', fiber: '2', protein: '11', salt: '1,25' });
+  assert.deepEqual(ok, { per100: { kcal: 266, fat: 10.4, satFat: 4.5, carbs: 33, fiber: 2, protein: 11, salt: 1.25 } }, 'virgola decimale, facoltativi vuoti omessi');
+  assert.deepEqual(editedValues({ kcal: '52,5', fat: '0', carbs: '12', protein: '0,3' }), { per100: { kcal: 52.5, fat: 0, carbs: 12, protein: 0.3 } }, 'valori come scritti');
+  assert.equal(editedValues({ kcal: '100', fat: '', carbs: '', protein: '3' }).error, 'Inserisci grassi e carboidrati.');
+  assert.match(editedValues({ kcal: '1200', fat: '1', carbs: '1', protein: '1' }).error, /energia/);
+  assert.match(editedValues({ kcal: '100', fat: '1', carbs: '101', protein: '1' }).error, /carboidrati/);
+  assert.match(editedValues({ kcal: '100', fat: '-1', carbs: '1', protein: '1' }).error, /grassi/);
+  assert.match(editedValues({ kcal: 'abc', fat: '1', carbs: '1', protein: '1' }).error, /Valore non valido per energia/);
 });

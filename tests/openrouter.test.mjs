@@ -12,7 +12,7 @@ const completion = (content, extra = {}) => ({
 
 test('richiesta: Chat Completions, foto come data URL, schema e fornitori compatibili', () => {
   assert.equal(OPENROUTER_URL, 'https://openrouter.ai/api/v1/chat/completions');
-  const b = orRequestBody('QUJD', 'image/jpeg', '  pasta  ', OR_DEFAULT_MODEL);
+  const b = orRequestBody({ kind: 'photo', base64: 'QUJD', mimeType: 'image/jpeg', hint: '  pasta  ' }, OR_DEFAULT_MODEL);
   assert.equal(b.model, 'openrouter/free');
   const [text, image] = b.messages[0].content;
   assert.equal(b.messages[0].role, 'user');
@@ -22,9 +22,14 @@ test('richiesta: Chat Completions, foto come data URL, schema e fornitori compat
   assert.equal(b.response_format.json_schema.strict, false, 'lo schema ha campi facoltativi');
   assert.ok(b.response_format.json_schema.schema.properties.items);
   assert.equal(b.provider.require_parameters, true);
-  assert.deepEqual(orRequestBody('QUJD', 'image/jpeg', '', OR_DEFAULT_MODEL, false).response_format, { type: 'json_object' });
+  assert.deepEqual(orRequestBody({ kind: 'photo', base64: 'QUJD', mimeType: 'image/jpeg', hint: '' }, OR_DEFAULT_MODEL, false).response_format, { type: 'json_object' });
   assert.doesNotMatch(JSON.stringify(b), /Bearer|sk-or/, 'la chiave non è nel corpo');
-  assert.throws(() => orRequestBody('QUJD', 'image/jpeg', '', '../x'));
+  assert.throws(() => orRequestBody({ kind: 'text', text: 'mela' }, '../x'));
+  const t = orRequestBody({ kind: 'text', text: 'una mela' }, OR_DEFAULT_MODEL);
+  assert.equal(t.messages[0].content.length, 1, 'descrizione: nessuna immagine');
+  assert.match(t.messages[0].content[0].text, /Descrizione dell’utente: «una mela»$/);
+  assert.equal(t.response_format.type, 'json_schema');
+  assert.equal(t.provider.require_parameters, true);
 });
 
 test('modelli: id validi ed etichette', () => {
@@ -49,6 +54,7 @@ test('risposta: testo, modello usato, motivi di fine', () => {
   const finish = (reason) => ({ choices: [{ finish_reason: reason, message: { content: '{"ite' } }] });
   assert.throws(() => orResponseText(finish('content_filter')), /rifiutato/);
   assert.throws(() => orResponseText(finish('length')), /troncata/);
+  assert.throws(() => orResponseText(finish('content_filter'), 'text'), /rifiutato la descrizione/);
   const interrupted = (() => { try { orResponseText(finish('error')); } catch (e) { return e; } })();
   assert.equal(interrupted.tryOtherModel, true);
   assert.throws(() => orResponseText(completion('   ')), /non ha restituito/);
@@ -77,7 +83,7 @@ test('errori veri del 26/11/2026: privacy, parametri, limite del fornitore', () 
   const privacy = JSON.stringify({ error: { code: 404, message: '0 endpoints out of 1 requested are available matching your guardrail restrictions and data policy. We removed them for the following reasons (an endpoint may have matched multiple reasons):\nFree model training violation (account settings): 1 endpoint excluded; configurable at https://openrouter.ai/settings/privacy' } });
   assert.match(orError(404, privacy).message, /impostazioni privacy.*Settings → Privacy/);
   const params = JSON.stringify({ error: { code: 404, message: 'No endpoints found that can handle the requested parameters. To learn more about provider routing, visit: https://openrouter.ai/docs/guides/routing/provider-selection' } });
-  assert.match(orError(404, params).message, /non accetta foto con risposta JSON/);
+  assert.match(orError(404, params).message, /non supporta ciò che serve \(foto o risposta JSON\)/);
   const upstream = JSON.stringify({ error: { message: 'Provider returned error', code: 429, metadata: {
     raw: 'inclusionai/ling-3.2-flash:free is temporarily rate-limited upstream. Please retry shortly, or add your own provider key to use your own limits',
     provider_name: 'Ant Digital', is_byok: false, provider_error_code: 'rpm_limit_exceeded', limit_source: 'upstream_provider_shared_pool' } } });

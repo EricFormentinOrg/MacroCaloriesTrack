@@ -1,6 +1,6 @@
 import { isISODate } from './dates.js';
-import { FOOD_SOURCES, MEALS, clean, isMeal, mealLabel } from './model.js';
-import type { Entry, EntryServing, Food, FoodSource, Goal, NutrientKey, Nutrients, Profile, Serving, SyncRecord, Targets, Weight } from './model.js';
+import { FOOD_SOURCES, MEALS, clean, isEstimate, isMeal, mealLabel } from './model.js';
+import type { Entry, EntryServing, Estimate, Food, FoodSource, Goal, NutrientKey, Nutrients, Profile, Serving, SyncRecord, Targets, Weight } from './model.js';
 import { entryNutrients } from './nutrition.js';
 
 export const BACKUP_APP = 'MacroCaloriesTrack';
@@ -144,10 +144,10 @@ function entry(o: unknown): Entry {
   });
 }
 
-function estimate(v: unknown): 'photo' | undefined {
+function estimate(v: unknown): Estimate | undefined {
   if (v === undefined || v === null) return undefined;
-  need(v === 'photo', 'campo “estimate” non valido');
-  return 'photo';
+  need(isEstimate(v), 'campo “estimate” non valido');
+  return v;
 }
 
 function weight(o: unknown): Weight {

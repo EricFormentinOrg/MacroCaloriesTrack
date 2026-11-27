@@ -1,4 +1,4 @@
-// Chiamata POST JSON ai servizi della stima da foto (Gemini, OpenRouter): tempo massimo,
+// Chiamata POST JSON ai servizi della stima del pasto (Gemini, OpenRouter): tempo massimo,
 // nessun cookie né referrer, errori di rete tradotti in messaggi per l'utente.
 import { GeminiError } from './dishAi.js';
 
@@ -10,7 +10,7 @@ export const AI_TIMEOUT_MS = 50_000;
 
 /** `service` è il nome mostrato nei messaggi ("Gemini", "OpenRouter"). Le chiavi vanno solo negli header. */
 export async function postAi(url: string, headers: Record<string, string>, body: unknown, service: string): Promise<Response> {
-  if (!navigator.onLine) throw new GeminiError('Sei offline: la stima da foto richiede la connessione.');
+  if (!navigator.onLine) throw new GeminiError('Sei offline: la stima richiede la connessione.');
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), AI_TIMEOUT_MS);
   try {

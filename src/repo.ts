@@ -2,7 +2,7 @@ import type { BackupData } from './backup.js';
 import * as db from './db.js';
 import { mergeById, pickNewer } from './merge.js';
 import { clean } from './model.js';
-import type { Entry, EntryServing, Food, FoodSource, Meal, Nutrients, Profile, Serving, Unit, Weight } from './model.js';
+import type { Entry, EntryServing, Estimate, Food, FoodSource, Meal, Nutrients, Profile, Serving, Unit, Weight } from './model.js';
 
 const now = (): number => Date.now();
 const newId = (): string => crypto.randomUUID();
@@ -117,10 +117,10 @@ export interface NewEntry {
   qty: number;
   per100: Nutrients;
   serving?: EntryServing;
-  estimate?: 'photo';
+  estimate?: Estimate;
 }
 
-/** Più voci in una sola transazione (es. tutte le voci di un piatto fotografato). */
+/** Più voci in una sola transazione (es. tutte le voci di un pasto stimato con l'AI). */
 export async function addEntries(list: ReadonlyArray<NewEntry>): Promise<Entry[]> {
   const t = now();
   const entries = list.map((x, i): Entry => clean({

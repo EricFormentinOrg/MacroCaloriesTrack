@@ -4,6 +4,14 @@
 // - ricerca testuale solo con /cgi/search.pl (non disponibile nella API v2);
 // - User-Agent "NomeApp/Versione (contatto)" richiesto.
 // Dati sotto licenza ODbL; i valori sono inseriti da volontari e vanno controllati.
+//
+// Riserva per la ricerca per nome: Search-a-licious (search.openfoodfacts.org), verificato dal vivo il 27/11/2026:
+// - CORS: rimanda l'origine della richiesta (anche sugli errori e sul preflight con X-User-Agent);
+// - GET /search?q=…&langs=…&page_size=…&fields=… (separati da virgola); risposta { hits, count, page, page_count, … };
+// - q in sintassi Lucene: ":", virgolette, parentesi o "AND" finale danno 400; tutte le parole devono comparire;
+// - i documenti hanno code, product_name(_it), brands come elenco (a volte con prefisso "xx:"), quantity,
+//   product_quantity_unit, ma i nutrienti solo di rado (13 risultati su 192 in 8 ricerche): i valori si prendono
+//   dalla scheda prodotto (/api/v2/product) quando l'utente sceglie il prodotto.
 import type { Nutrients, NutrientKey, Serving, Unit } from './model.js';
 import { checkFood } from './nutrition.js';
 
@@ -11,10 +19,11 @@ export const OFF_ORIGIN = 'https://world.openfoodfacts.org';
 export const OFF_PRODUCT_LIMIT = 15;
 export const OFF_SEARCH_LIMIT = 10;
 export const OFF_PAGE_SIZE = 24;
+export const SAL_ORIGIN = 'https://search.openfoodfacts.org';
 
 const FIELDS = [
   'code', 'product_name', 'product_name_it', 'generic_name', 'generic_name_it', 'brands',
-  'quantity', 'product_quantity_unit', 'serving_quantity', 'nutrition_data', 'nutriments',
+  'quantity', 'product_quantity_unit', 'serving_quantity', 'serving_quantity_unit', 'nutrition_data', 'nutriments',
 ].join(',');
 
 export interface OffProduct {
@@ -26,6 +35,8 @@ export interface OffProduct {
   /** Energia e i tre macronutrienti presenti. */
   complete: boolean;
   serving?: Serving;
+  /** Trovato con la ricerca di riserva: i valori vanno presi dalla scheda prodotto prima dell'uso. */
+  partial?: true;
 }
 
 export const isBarcode = (s: string): boolean => /^\d{8,14}$/.test(s.trim());
@@ -46,6 +57,21 @@ export function searchUrl(query: string): string {
     fields: FIELDS,
   });
   return `${OFF_ORIGIN}/cgi/search.pl?${q.toString()}`;
+}
+
+/**
+ * Testo per Search-a-licious, che interpreta la query come Lucene: via i caratteri speciali (un ":" diventa
+ * un filtro su un campo, una virgoletta aperta un errore) e minuscole, così AND, OR e NOT restano parole.
+ */
+export function salQuery(query: string): string {
+  return query.toLowerCase().replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
+}
+
+export function salSearchUrl(query: string): string {
+  const q = salQuery(query);
+  if (!q) throw new Error('Ricerca vuota');
+  const p = new URLSearchParams({ q, langs: 'it', page_size: String(OFF_PAGE_SIZE), fields: FIELDS });
+  return `${SAL_ORIGIN}/search?${p.toString()}`;
 }
 
 /** Il browser non permette di impostare User-Agent: il server accetta X-User-Agent (verificato nel preflight CORS). */
@@ -103,7 +129,9 @@ function unitOf(p: Obj): Unit {
   if (p.product_quantity_unit === 'ml') return 'ml';
   if (p.product_quantity_unit === 'g') return 'g';
   const q = typeof p.quantity === 'string' ? p.quantity : '';
-  return /\d\s*(ml|cl|dl|l)\b/i.test(q) ? 'ml' : 'g';
+  if (/\d\s*(ml|cl|dl|l)\b/i.test(q)) return 'ml';
+  // Confezione senza unità (es. "33"): l'unità della porzione, se c'è, dice se è una bevanda.
+  return /\d\s*(g|kg)\b/i.test(q) ? 'g' : p.serving_quantity_unit === 'ml' ? 'ml' : 'g';
 }
 
 /** Restituisce undefined se il prodotto non ha codice o nome utilizzabili. */
@@ -136,6 +164,28 @@ export function parseProductResponse(v: unknown): OffProduct | null {
   if (v.status === 0) return null;
   if (v.status !== 1) throw new Error('Risposta di Open Food Facts non valida.');
   return parseOffProduct(v.product) ?? null;
+}
+
+/** I marchi di Search-a-licious possono avere il prefisso di lingua della tassonomia ("xx:La Molisana"). */
+function salBrands(v: unknown): unknown {
+  const strip = (x: unknown) => (typeof x === 'string' ? x.replace(/^[a-z]{2}:/, '') : x);
+  return Array.isArray(v) ? v.map(strip) : strip(v);
+}
+
+/** Risultati di Search-a-licious: stessa validazione dei prodotti, tutti da completare con la scheda prodotto. */
+export function parseSalResponse(v: unknown): { count: number; products: OffProduct[] } {
+  if (!isObj(v) || !Array.isArray(v.hits) || v.hits.length > 200) throw new Error('Risposta di Open Food Facts non valida.');
+  const products: OffProduct[] = [];
+  const seen = new Set<string>();
+  for (const h of v.hits) {
+    const x = isObj(h) ? parseOffProduct({ ...h, brands: salBrands(h.brands) }) : undefined;
+    if (x && !seen.has(x.code)) {
+      seen.add(x.code);
+      products.push({ ...x, partial: true });
+    }
+  }
+  const count = num(v.count, 1e9) ?? products.length;
+  return { count, products };
 }
 
 export function parseSearchResponse(v: unknown): { count: number; products: OffProduct[] } {

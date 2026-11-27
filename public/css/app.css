@@ -337,11 +337,12 @@ a { color: var(--accent); }
 .add-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .add-actions .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 10px; }
 .add-actions .ico { width: 20px; height: 20px; }
+.add-actions .add-create { grid-column: 1 / -1; }
 
-/* ---- Foto del piatto */
+/* ---- Stima del pasto: foto del piatto o descrizione */
 .dish-preview { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 12px; margin-bottom: 12px; background: var(--track); }
 .dish-body { display: grid; gap: 10px; }
-.label-text.dish-hint { min-height: 0; }
+.label-text.dish-hint, .label-text.dish-text { min-height: 0; }
 .dish-wait { color: var(--ink-2); padding: 18px 0; }
 .dish-items { margin-top: 0; }
 .dish-row { padding: 10px 12px 12px; display: grid; gap: 6px; }
@@ -354,6 +355,12 @@ a { color: var(--accent); }
 .dish-src-label { font-size: .875rem; }
 .dish-conf { font-size: .8125rem; color: var(--ink-2); }
 .conf-bassa { color: var(--warn-ink); }
+.dish-values summary { cursor: pointer; padding: 10px 0; min-height: 44px; box-sizing: border-box; font-size: .9375rem; font-weight: 500; color: var(--accent); }
+.dish-values .ngrid { padding: 0; }
+.dish-values .form-error { margin-top: 6px; }
+.btn.dish-back { justify-self: start; padding-left: 0; padding-right: 0; color: var(--accent); }
+.dish-warns { display: grid; gap: 6px; }
+.dish-warns:empty { display: none; }
 .dish-total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding: 4px 2px; }
 .list-title { font-family: var(--sans); font-size: .875rem; font-weight: 600; color: var(--ink-2); margin: 20px 0 6px; }
 .results > .list:first-child { margin-top: 12px; }
@@ -486,6 +493,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .section { margin-top: 28px; display: grid; gap: 10px; justify-items: start; }
 .section > p { color: var(--ink-2); max-width: 60ch; }
 .stack { display: grid; gap: 10px; width: 100%; }
+.ai-set > .field { width: 100%; max-width: 360px; }
 
 /* ---- Fogli: scorciatoie di data, unità accanto al numero */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -6px; }

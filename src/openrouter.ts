@@ -1,7 +1,9 @@
-// OpenRouter per la foto del piatto, come riserva di Gemini o al suo posto: richiesta, risposta, errori.
+// OpenRouter per la stima del pasto (foto o descrizione), come riserva di Gemini, al suo posto o prima di lui:
+// richiesta, risposta, errori.
 // Modulo puro, testato in Node. Formato verificato sulla documentazione di OpenRouter il 26/11/2026
 // (Chat Completions con `response_format` json_schema e `provider.require_parameters`).
-import { DISH_SCHEMA, GeminiError, prompt } from './dishAi.js';
+import { DISH_SCHEMA, GeminiError, promptFor, refusal } from './dishAi.js';
+import type { DishInput, DishKind } from './dishAi.js';
 
 export const OPENROUTER_ORIGIN = 'https://openrouter.ai';
 export const OPENROUTER_URL = `${OPENROUTER_ORIGIN}/api/v1/chat/completions`;
@@ -22,23 +24,24 @@ export const isOrModelId = (s: string): boolean => /^[a-z0-9][a-z0-9._-]{0,40}\/
 /** Nome leggibile: l'etichetta per i modelli noti (senza la nota tra parentesi), altrimenti l'id. */
 export const orModelLabel = (id: string): string => OR_MODELS.find((m) => m.id === id)?.label.replace(/\s*\(.*\)$/, '') ?? id;
 
-export function orRequestBody(imageBase64: string, mimeType: string, hint: string, model: string, withSchema = true): unknown {
+export function orRequestBody(input: DishInput, model: string, withSchema = true): unknown {
   if (!isOrModelId(model)) throw new Error('Modello non valido');
+  const text = { type: 'text', text: promptFor(input) };
   return {
     model,
     messages: [{
       role: 'user',
-      content: [
-        { type: 'text', text: prompt(hint) },
-        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-      ],
+      // Senza foto il router dei modelli gratuiti può scegliere anche modelli solo testuali.
+      content: input.kind === 'photo'
+        ? [text, { type: 'image_url', image_url: { url: `data:${input.mimeType};base64,${input.base64}` } }]
+        : [text],
     }],
     // Schema come indicazione forte, non "strict": secondo la documentazione le modalità rigide limitano
     // le funzioni di JSON Schema usabili, e lo schema ha campi facoltativi. La risposta passa comunque da parseDish.
     response_format: withSchema
       ? { type: 'json_schema', json_schema: { name: 'piatto', strict: false, schema: DISH_SCHEMA } }
       : { type: 'json_object' },
-    // Solo fornitori che supportano davvero tutti i parametri della richiesta (foto e formato JSON).
+    // Solo fornitori che supportano davvero tutti i parametri della richiesta (foto, se c'è, e formato JSON).
     provider: { require_parameters: true },
     temperature: 0.2,
     max_tokens: 8000,
@@ -80,7 +83,7 @@ export function orError(status: number, body: string): GeminiError {
     return new GeminiError('Nessun modello OpenRouter disponibile con le tue impostazioni privacy: su openrouter.ai, in Settings → Privacy, permetti i fornitori dei modelli gratuiti che addestrano sui dati, oppure scegli un modello a pagamento in Impostazioni.');
   }
   if (status === 404 && /requested parameters/i.test(msg)) {
-    return new GeminiError('Il modello scelto su OpenRouter non accetta foto con risposta JSON: scegline un altro in Impostazioni.');
+    return new GeminiError('Il modello scelto su OpenRouter non supporta ciò che serve (foto o risposta JSON): scegline un altro in Impostazioni.');
   }
   if (status === 408) return new GeminiError('OpenRouter non ha risposto in tempo: riprova tra qualche minuto.', other);
   if (status === 429 && (/^upstream/.test(limitSource) || /upstream/i.test(raw))) {
@@ -116,7 +119,8 @@ export interface OrText {
 }
 
 /** Testo generato da una risposta Chat Completions, o un errore leggibile. */
-export function orResponseText(v: unknown): OrText {
+export function orResponseText(v: unknown, kind: DishKind = 'photo'): OrText {
+  const r = refusal(kind);
   if (!isObj(v)) throw new GeminiError('Risposta di OpenRouter non valida.');
   // Un errore del fornitore durante la generazione può arrivare con stato 200.
   if (isObj(v.error)) {
@@ -125,8 +129,8 @@ export function orResponseText(v: unknown): OrText {
   }
   const c = Array.isArray(v.choices) ? v.choices[0] : undefined;
   if (!isObj(c)) throw new GeminiError('OpenRouter non ha restituito risultati: riprova.', { tryOtherModel: true });
-  if (c.finish_reason === 'content_filter') throw new GeminiError('Il modello ha rifiutato la foto: provane un’altra.');
-  if (c.finish_reason === 'length') throw new GeminiError('Risposta troncata: riprova con una foto di un solo piatto.');
+  if (c.finish_reason === 'content_filter') throw new GeminiError(`Il modello ha rifiutato ${r.refused}`);
+  if (c.finish_reason === 'length') throw new GeminiError(`Risposta troncata: ${r.truncated}`);
   if (c.finish_reason === 'error') throw new GeminiError('Il modello su OpenRouter si è interrotto: riprova.', { tryOtherModel: true });
   const content = isObj(c.message) ? c.message.content : undefined;
   const text = typeof content === 'string'

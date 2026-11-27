@@ -337,6 +337,10 @@ try {
     code: '8000000000062', product_name_it: 'Passata di pomodoro', brands: 'Conserve Esempio', quantity: '700 g',
     nutriments: { 'energy-kcal_100g': 36, fat_100g: 0.2, carbohydrates_100g: 6, sugars_100g: 5, proteins_100g: 1.4, salt_100g: 0.4 },
   };
+  const nutella = {
+    code: '8000500310427', product_name_it: 'Nutella', brands: 'Ferrero', product_quantity_unit: 'g', quantity: '450 g', serving_quantity: 15,
+    nutriments: { 'energy-kcal_100g': 539, fat_100g: 30.9, 'saturated-fat_100g': 10.6, carbohydrates_100g: 57.5, sugars_100g: 56.3, proteins_100g: 6.3, salt_100g: 0.107 },
+  };
   const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, serviceWorkers: 'block' });
   await ctx2.addInitScript(() =>
     document.addEventListener('securitypolicyviolation', (e) => console.error('CSP-VIOLATION', e.violatedDirective, e.blockedURI)),
@@ -351,20 +355,50 @@ try {
     if (u.pathname === '/cgi/search.pl' && u.searchParams.get('search_terms') === 'spaghetti integrali') {
       return json({ count: 2, page: 1, page_size: 24, products: [spaghetti, biscotti] });
     }
-    if (u.pathname === '/cgi/search.pl' && u.searchParams.get('search_terms') === 'nutella') {
+    if (u.pathname === '/cgi/search.pl' && u.searchParams.get('search_terms') === 'pasta fresca') {
+      // Prima risposta vuota (servizio in difficoltà), poi il prodotto: il vuoto non deve restare in cache.
+      off.fresh = (off.fresh ?? 0) + 1;
+      return json({ count: off.fresh === 1 ? 0 : 1, page: 1, page_size: 24, products: off.fresh === 1 ? [] : [{ ...passata, code: '8000000000079', product_name_it: 'Tagliatelle fresche' }] });
+    }
+    if (u.pathname === '/cgi/search.pl' && ['nutella', 'cioccolato fondente'].includes(u.searchParams.get('search_terms'))) {
       // Come il servizio reale: pagina HTML senza header CORS, che il browser blocca.
       return route.fulfill({ status: 503, contentType: 'text/html', body: '<!DOCTYPE html><title>Page temporarily unavailable</title>' });
     }
     if (u.pathname === '/api/v2/product/8000000000062.json') return json({ code: '8000000000062', status: 1, product: passata });
+    if (u.pathname === '/api/v2/product/8000500310427.json') return json({ code: '8000500310427', status: 1, product: nutella });
     problems.push(`richiesta OFF inattesa: ${req.url()}`);
     return route.fulfill({ status: 404, headers: cors, body: '' });
+  });
+  // Search-a-licious, riserva della ricerca per nome. Come quello vero (27/11/2026): CORS che rimanda l'origine,
+  // documenti con marchi a prefisso "xx:" e senza nutrienti.
+  const sal = { calls: [] };
+  await ctx2.route('https://search.openfoodfacts.org/**', async (route) => {
+    const req = route.request();
+    const u = new URL(req.url());
+    const scors = { 'Access-Control-Allow-Origin': 'http://localhost:8181', 'Access-Control-Allow-Headers': 'x-user-agent', Vary: 'Origin' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 200, headers: scors });
+    sal.calls.push({ q: u.searchParams.get('q'), langs: u.searchParams.get('langs'), fields: u.searchParams.get('fields'), order: off.calls.length });
+    const page = { page: 1, page_size: 24, page_count: 1, took: 3, timed_out: false, is_count_exact: true };
+    if (u.searchParams.get('q') === 'nutella') {
+      return route.fulfill({ status: 200, contentType: 'application/json', headers: scors, body: JSON.stringify({ ...page, count: 1,
+        hits: [{ code: '8000500310427', product_name: 'Nutella', product_name_it: 'Nutella', brands: ['xx:Ferrero'], quantity: '450 g', product_quantity_unit: 'g', nutriments: null }] }) });
+    }
+    if (u.searchParams.get('q') === 'cioccolato fondente') {
+      return route.fulfill({ status: 500, contentType: 'application/json', headers: scors, body: JSON.stringify({ errors: [{ title: 'Internal error' }] }) });
+    }
+    problems.push(`richiesta Search-a-licious inattesa: ${req.url()}`);
+    return route.fulfill({ status: 404, headers: scors, body: '' });
   });
   const p2 = await ctx2.newPage();
   p2.on('console', (m) => {
     if (m.type() !== 'error' || /status of 503|blocked by CORS policy|net::ERR_FAILED/.test(m.text())) return;
+    // Il 500 di Search-a-licious è voluto: riserva anch'essa giù.
+    if (/status of 500/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://search.openfoodfacts.org/')) return;
     // Il 400 di Gemini è voluto: simula lo schema rifiutato. Il 429 di OpenRouter simula il limite del fornitore.
     if (/status of 400/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://generativelanguage.googleapis.com/')) return;
     if (/status of 429/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://openrouter.ai/')) return;
+    // Il 500 di OpenRouter è voluto: simula il servizio non disponibile quando è il primo da provare.
+    if (/status of 500/.test(m.text()) && (m.location()?.url ?? '').startsWith('https://openrouter.ai/')) return;
     problems.push(`(fase 2) ${m.text()}`);
   });
   p2.on('pageerror', (e) => problems.push(`pageerror(fase 2): ${e.message}`));
@@ -426,11 +460,49 @@ try {
   await p2.waitForSelector('[data-src="off"] .row:has-text("Passata di pomodoro")');
   assert.equal(off.calls.length, callsBefore, 'seconda richiesta servita dalla cache');
 
-  // Servizio non disponibile (503): messaggio, nessun errore
+  // Risultato vuoto: non resta in cache, la ricerca successiva torna a chiedere a OFF
+  await p2.fill('.search', 'pasta fresca');
+  await p2.click('.off-cta');
+  await p2.waitForSelector('[data-src="off"] .empty:has-text("Nessun prodotto trovato")');
+  await p2.reload();
+  await p2.waitForSelector('.add');
+  await p2.fill('.search', 'pasta fresca');
+  await p2.click('.off-cta');
+  await p2.waitForSelector('[data-src="off"] .row:has-text("Tagliatelle fresche")');
+  assert.equal(off.fresh, 2, 'risultato vuoto non servito dalla cache');
+
+  // Ricerca principale non disponibile (503 senza CORS): risultati da Search-a-licious, valori dalla scheda prodotto.
+  const mainBefore = off.calls.length;
   await p2.fill('.search', 'nutella');
   await p2.click('.off-cta');
+  await p2.waitForSelector('[data-src="off"] .row:has-text("Nutella")');
+  assert.equal(off.calls.length, mainBefore + 1, 'prima la ricerca principale');
+  assert.deepEqual(sal.calls.map((c) => [c.q, c.langs]), [['nutella', 'it']]);
+  assert.match(sal.calls[0].fields, /nutriments/);
+  assert.match(await p2.textContent('[data-src="off"] .off-alt'), /motore di ricerca alternativo/);
+  assert.equal(await p2.textContent('[data-src="off"] .row:has-text("Nutella") .row-sub'), 'Ferrero, valori alla scelta', 'marchio senza prefisso');
+  assert.equal(await p2.locator('[data-src="off"] li:has-text("Nutella") .fav-toggle').count(), 0, 'niente preferito senza valori');
+  await p2.screenshot({ path: `${SHOTS}/10b-ricerca-alternativa.png`, fullPage: true });
+  await p2.click('[data-src="off"] .row:has-text("Nutella")');
+  await p2.waitForSelector('dialog.sheet[open] .qty-input');
+  assert.equal(off.calls[off.calls.length - 1].path, '/api/v2/product/8000500310427.json', 'valori dalla scheda prodotto');
+  assert.match(await p2.textContent('dialog.sheet[open]'), /Nutella/);
+  await p2.fill('dialog .qty-input', '100');
+  assert.match(await p2.textContent('dialog.sheet[open]'), /539\s*kcal/);
+  await p2.click('dialog button:has-text("Annulla")');
+  await p2.waitForSelector('dialog.sheet', { state: 'detached' });
+
+  // Ricerca principale in pausa dopo l'errore: si va dritti alla riserva. Se anche lei fallisce, la principale
+  // viene riprovata e resta il suo messaggio.
+  await p2.fill('.search', 'cioccolato fondente');
+  await p2.click('.off-cta');
   await p2.waitForSelector('[data-src="off"] .form-error');
-  assert.match(await p2.textContent('[data-src="off"] .form-error'), /non accetta ricerche/);
+  assert.match(await p2.textContent('[data-src="off"] .form-error'), /non accetta ricerche in questo momento: il loro servizio/);
+  const sc = sal.calls.find((c) => c.q === 'cioccolato fondente');
+  const mainCalls = off.calls.filter((c) => c.q === 'cioccolato fondente');
+  assert.ok(sc, 'riserva provata');
+  assert.equal(mainCalls.length, 1);
+  assert.equal(off.calls.indexOf(mainCalls[0]), sc.order, 'riserva prima della principale, che era in pausa');
 
   // Alimenti: preferiti e provenienza
   await p2.click('a[data-tab="alimenti"]');
@@ -496,7 +568,8 @@ try {
   });
   await p2.goto(BASE + '#/impostazioni');
   await p2.waitForSelector('.settings');
-  const gemSection = p2.locator('section:has(h2:text("Foto del piatto"))');
+  const gemSection = p2.locator('section.gemini-set');
+  assert.equal(await gemSection.locator('h2').textContent(), 'Gemini');
   await gemSection.locator('input[type=password]').fill('corta');
   await gemSection.locator('button:has-text("Salva la chiave")').click();
   assert.match(await gemSection.locator('.form-error').textContent(), /troppo corta/);
@@ -532,11 +605,31 @@ try {
   assert.match(await p2.textContent('dialog .dish-body'), /1 voce scartata/);
   assert.equal(await p2.inputValue('dialog .dish-row >> nth=0 >> select'), 'db', 'mela: valori della banca dati');
   assert.match(await p2.textContent('dialog .dish-row >> nth=0 >> select'), /Banca dati: Mela, cruda/);
-  assert.match(await p2.textContent('dialog .dish-row >> nth=1'), /Valori stimati dalla foto/);
+  assert.equal(await p2.inputValue('dialog .dish-row >> nth=1 >> select'), 'ai');
+  assert.match(await p2.textContent('dialog .dish-row >> nth=1 >> select'), /Stima dalla foto/);
   await p2.fill('dialog .dish-row >> nth=1 >> .dish-qty', '200');
   // Mela 150 g × 52 kcal (banca dati) = 78; piatto 200 g × 180 = 360 → 438
   assert.match(await p2.textContent('dialog .dish-total'), /Totale 438 kcal/);
   await p2.screenshot({ path: `${SHOTS}/19-foto-piatto.png`, fullPage: true });
+  // Valori per 100 g corretti a mano: i campi partono da quelli in uso, la correzione cambia totale e fonte.
+  const row1 = p2.locator('dialog .dish-row >> nth=1');
+  await row1.locator('.dish-values summary').click();
+  assert.equal(await row1.locator('.dish-values .nrow input >> nth=0').inputValue(), '180');
+  assert.equal(await row1.locator('.dish-values .nrow input >> nth=6').inputValue(), '9', 'proteine');
+  const row0 = p2.locator('dialog .dish-row >> nth=0');
+  await row0.locator('.dish-values summary').click();
+  assert.equal(await row0.locator('.dish-values .nrow input >> nth=0').inputValue(), '52', 'mela: valori della banca dati');
+  await row0.locator('.dish-values summary').click();
+  await row1.locator('.dish-values .nrow input >> nth=0').fill('200');
+  assert.equal(await row1.locator('select').inputValue(), 'edit');
+  // 78 + 200 g × 200 kcal = 478
+  assert.match(await p2.textContent('dialog .dish-total'), /Totale 478 kcal/);
+  await row1.locator('.dish-values .nrow input >> nth=6').fill('');
+  assert.match(await row1.locator('.dish-values .form-error').textContent(), /Inserisci proteine/);
+  assert.equal(await p2.isDisabled('dialog button:has-text("Aggiungi a Pranzo")'), true, 'valori non validi: niente aggiunta');
+  await row1.locator('.dish-values .nrow input >> nth=6').fill('9,5');
+  assert.equal(await p2.isEnabled('dialog button:has-text("Aggiungi a Pranzo")'), true);
+  await p2.screenshot({ path: `${SHOTS}/19b-valori-corretti.png`, fullPage: true });
   await p2.click('dialog button:has-text("Aggiungi a Pranzo")');
   await p2.waitForSelector('dialog.sheet', { state: 'detached' });
   await p2.waitForSelector('.diary');
@@ -544,7 +637,7 @@ try {
   const pranzo = p2.locator('.meal:has(h2:text("Pranzo")) .row');
   assert.equal(await pranzo.count(), 2);
   assert.equal(await p2.locator('.meal:has(h2:text("Pranzo")) .row-sub:has-text("stima da foto")').count(), 2);
-  assert.match(await p2.textContent('.meal:has(h2:text("Pranzo")) .meal-kcal'), /^438\s*kcal$/);
+  assert.match(await p2.textContent('.meal:has(h2:text("Pranzo")) .meal-kcal'), /^478\s*kcal$/);
 
   // ---- OpenRouter come riserva (simulato): Gemini sovraccarico su entrambi i modelli, risponde OpenRouter.
   const orr = { calls: [] };
@@ -553,7 +646,21 @@ try {
     const req = route.request();
     const ocors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization,Content-Type' };
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: ocors });
-    orr.calls.push({ url: req.url(), auth: req.headers()['authorization'], referer: req.headers()['referer'], body: JSON.parse(req.postData() ?? '{}') });
+    const body = JSON.parse(req.postData() ?? '{}');
+    orr.calls.push({ url: req.url(), auth: req.headers()['authorization'], referer: req.headers()['referer'], body });
+    if (orr.down) {
+      return route.fulfill({ status: 500, contentType: 'application/json', headers: ocors, body: JSON.stringify({ error: { message: 'Internal Server Error', code: 500 } }) });
+    }
+    if (body.messages[0].content.length === 1) {
+      // Descrizione scritta: nessuna foto nella richiesta.
+      const textJson = { items: [
+        { name: 'Pizza margherita', search: 'pizza margherita', grams: 250, unit: 'g', confidence: 'media', note: '2 fette di una pizza media',
+          per100: { kcal: 250, fat: 9, satFat: 4, carbs: 32, sugars: 3, fiber: 2, protein: 11, salt: 1.2 } },
+        { name: 'Birra', search: 'birra', grams: 400, unit: 'ml', confidence: 'alta', per100: { kcal: 43, fat: 0, carbs: 3.6, protein: 0.5 } },
+      ] };
+      return route.fulfill({ status: 200, contentType: 'application/json', headers: ocors,
+        body: JSON.stringify({ id: 'gen-2', model: 'openrouter/free', choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(textJson) } }] }) });
+    }
     // Primo invio: modello gratuito al limite presso il fornitore (risposta vera del 26/11/2026). L'app riprova da sola.
     if (orr.calls.length === 1) {
       return route.fulfill({ status: 429, contentType: 'application/json', headers: ocors,
@@ -598,6 +705,77 @@ try {
     /Stima fatta con OpenRouter, nvidia\/nemotron-3\.5-super-vl:free: Gemini 3\.8 Flash non era disponibile/);
   assert.match(await p2.textContent('dialog .dish-row'), /Insalata mista/);
   await p2.screenshot({ path: `${SHOTS}/20-foto-openrouter.png`, fullPage: true });
+  await p2.click('dialog .sheet-actions button:has-text("Annulla")');
+  await p2.waitForSelector('dialog.sheet', { state: 'detached' });
+
+  // ---- Descrizione del pasto, con OpenRouter scelto come primo servizio.
+  await p2.goto(BASE + '#/impostazioni');
+  await p2.waitForSelector('.settings');
+  const aiSet = p2.locator('section.ai-set');
+  assert.equal(await aiSet.locator('input[value="gemini"]').isChecked(), true, 'Gemini per primo: predefinito');
+  await aiSet.locator('.seg-opt:has-text("OpenRouter")').click();
+  await p2.waitForSelector('#toast:has-text("OpenRouter verrà provato per primo")');
+  await p2.reload();
+  await p2.waitForSelector('.settings');
+  assert.equal(await p2.locator('section.ai-set input[value="openrouter"]').isChecked(), true, 'scelta salvata');
+  await p2.locator('section.ai-set').screenshot({ path: `${SHOTS}/22-precedenza.png` });
+  gem.down = false;
+  const gemBefore2 = gem.calls.length;
+  const orBefore = orr.calls.length;
+  await p2.goto(`${BASE}#/aggiungi/${today}/dinner`);
+  await p2.waitForSelector('.add');
+  await p2.click('button:has-text("Descrivi il pasto")');
+  await p2.waitForSelector('dialog.sheet[open] .dish-text');
+  assert.match(await p2.textContent('dialog .dish-body'), /La descrizione viene inviata a OpenRouter e, se non risponde, a Google Gemini/);
+  await p2.click('dialog button:has-text("Analizza")');
+  assert.match(await p2.textContent('dialog .dish-body .form-error'), /Scrivi cosa hai mangiato/);
+  assert.equal(orr.calls.length, orBefore, 'descrizione vuota: nessuna richiesta');
+  await p2.fill('dialog .dish-text', '2 fette di pizza margherita e una birra media');
+  await p2.click('dialog button:has-text("Analizza")');
+  await p2.waitForSelector('dialog .dish-row >> nth=1');
+  assert.equal(orr.calls.length, orBefore + 1, 'OpenRouter per primo');
+  assert.equal(gem.calls.length, gemBefore2, 'Gemini non chiamato');
+  const tc = orr.calls[orr.calls.length - 1].body;
+  assert.equal(tc.messages[0].content.length, 1, 'nessuna foto');
+  assert.match(tc.messages[0].content[0].text, /Descrizione dell’utente: «2 fette di pizza margherita e una birra media»/);
+  assert.equal(await p2.locator('dialog .dish-fallback').count(), 0);
+  assert.match(await p2.textContent('dialog .dish-row >> nth=0 >> select'), /Stima dalla descrizione/);
+  assert.match(await p2.textContent('dialog .dish-row >> nth=0'), /2 fette di una pizza media/);
+  // Birra abbinata alla banca dati ("Birra, lager", 42 kcal); la pizza no (nome troppo diverso).
+  assert.equal(await p2.inputValue('dialog .dish-row >> nth=1 >> select'), 'db');
+  assert.match(await p2.textContent('dialog .dish-row >> nth=1 >> select'), /Banca dati: Birra, lager/);
+  // Pizza 250 g × 250 = 625; birra 400 ml × 42 = 168 → 793
+  assert.match(await p2.textContent('dialog .dish-total'), /Totale 793 kcal/);
+  await p2.fill('dialog .dish-row >> nth=1 >> .dish-qty', '330');
+  // 625 + 330 × 42 / 100 = 625 + 138,6 → 764
+  assert.match(await p2.textContent('dialog .dish-total'), /Totale 764 kcal/);
+  await p2.screenshot({ path: `${SHOTS}/21-descrizione.png`, fullPage: true });
+  assert.equal(await p2.locator('dialog .dish-row >> nth=1 >> .warn').count(), 0, 'nessun avviso kcal/macro sui valori della banca dati (alcol)');
+  // Indietro: la descrizione resta, si può correggere e rifare la stima.
+  await p2.click('dialog button.dish-back:has-text("Modifica la descrizione")');
+  assert.equal(await p2.inputValue('dialog .dish-text'), '2 fette di pizza margherita e una birra media');
+  await p2.click('dialog button:has-text("Analizza")');
+  await p2.waitForSelector('dialog .dish-row >> nth=1');
+  await p2.fill('dialog .dish-row >> nth=1 >> .dish-qty', '330');
+  await p2.click('dialog button:has-text("Aggiungi a Cena")');
+  await p2.waitForSelector('dialog.sheet', { state: 'detached' });
+  await p2.waitForSelector('.diary');
+  assert.match(await p2.textContent('#toast'), /Aggiunte 2 voci a Cena/);
+  assert.equal(await p2.locator('.meal:has(h2:text("Cena")) .row-sub:has-text("stima da descrizione")').count(), 2);
+  assert.match(await p2.textContent('.meal:has(h2:text("Cena")) .meal-kcal'), /^764\s*kcal$/);
+
+  // OpenRouter per primo ma non disponibile: si passa a Gemini (modello scelto sovraccarico, poi Flash-Lite).
+  orr.down = true;
+  await p2.goto(`${BASE}#/aggiungi/${today}/snack`);
+  await p2.waitForSelector('.add');
+  await p2.click('button:has-text("Descrivi il pasto")');
+  await p2.fill('dialog .dish-text', 'una mela');
+  await p2.click('dialog button:has-text("Analizza")');
+  await p2.waitForSelector('dialog .dish-row');
+  assert.match(await p2.textContent('dialog .dish-fallback'), /Stima fatta con Gemini 3\.5 Flash-Lite: OpenRouter, Modelli gratuiti non era disponibile/);
+  const lastGem = gem.calls[gem.calls.length - 1];
+  assert.equal(lastGem.body.contents[0].parts.length, 1, 'Gemini: solo testo');
+  assert.match(lastGem.body.contents[0].parts[0].text, /«una mela»/);
   await p2.click('dialog .sheet-actions button:has-text("Annulla")');
   await p2.waitForSelector('dialog.sheet', { state: 'detached' });
   await ctx2.close();

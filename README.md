@@ -1,8 +1,8 @@
 # MacroCaloriesTrack
 
-Diario alimentare personale: calorie e macronutrienti per pasto, obiettivo calcolato da profilo e peso, storico, backup. Funziona offline come app installata sulla schermata Home dell'iPhone. I dati restano sul dispositivo; solo le ricerche su Open Food Facts escono, e solo quando le chiedi.
+Diario alimentare personale: calorie e macronutrienti per pasto, obiettivo calcolato da profilo e peso, storico, backup. Funziona offline come app installata sulla schermata Home dell'iPhone. I dati restano sul dispositivo. Escono solo quando lo chiedi tu: le ricerche su Open Food Facts, la foto o la descrizione inviate per una stima a Gemini o OpenRouter, e la copia cifrata su Dropbox, se la attivi.
 
-Stato: diario con settimana e pesate, banca dati svizzera, Open Food Facts, preferiti, copia di pasti e giorni, sincronizzazione cifrata su Dropbox, valori dall'etichetta con Testo live e scheda Andamento (peso, calorie, medie settimanali). Restano ricette e lettura del codice a barre. Il dettaglio è in [docs/PIANO.md](docs/PIANO.md).
+Stato: diario con settimana e pesate, banca dati svizzera, Open Food Facts, preferiti, copia di pasti e giorni, sincronizzazione cifrata su Dropbox, valori dall'etichetta con Testo live, stima del pasto da foto o da descrizione con Gemini o OpenRouter, e scheda Andamento (peso, calorie, medie settimanali). Restano ricette e lettura del codice a barre. Il dettaglio è in [docs/PIANO.md](docs/PIANO.md).
 
 ## Requisiti
 
@@ -57,7 +57,7 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 
 ## Sicurezza
 
-- La CSP permette solo risorse dello stesso sito: nessuno script o font esterno. Uniche eccezioni, in `connect-src`, le chiamate API a Open Food Facts, Dropbox (`api.dropboxapi.com`, `content.dropboxapi.com`), Gemini (`generativelanguage.googleapis.com`) e OpenRouter (`openrouter.ai`).
+- La CSP permette solo risorse dello stesso sito: nessuno script o font esterno. Uniche eccezioni, in `connect-src`, le chiamate API a Open Food Facts (`world.openfoodfacts.org` e, come riserva della ricerca per nome, `search.openfoodfacts.org`), Dropbox (`api.dropboxapi.com`, `content.dropboxapi.com`), Gemini (`generativelanguage.googleapis.com`) e OpenRouter (`openrouter.ai`).
 - Le risposte di Open Food Facts vengono validate campo per campo, come i backup.
 - Chiavi Gemini e OpenRouter solo in IndexedDB e solo negli header della richiesta; le risposte dei modelli sono validate campo per campo.
 - Nessun `innerHTML` nel codice: testi e file importati non possono iniettare markup.
@@ -70,18 +70,22 @@ Finché la sincronizzazione non è pronta, il backup è l'unico modo per non per
 
 Nell'editor di un alimento, **Leggi dall'etichetta** compila i valori dal testo della tabella nutrizionale. Su iPhone: inquadra la tabella con la Fotocamera (o apri una foto), tieni premuto sul testo, **Seleziona tutto**, **Copia**, poi incolla nell'app. I campi incerti restano evidenziati finché non li controlli.
 
-## Foto del piatto
+## Stima del pasto: foto o descrizione
 
-In **Aggiungi**, **Foto del piatto** invia la foto a Google Gemini con la tua chiave e propone alimenti, grammi e valori. Controlli, correggi e confermi: niente viene salvato senza conferma, e le voci riportano "stima da foto".
+In **Aggiungi**:
+- **Foto del piatto** invia la foto a Gemini o OpenRouter con la tua chiave;
+- **Descrivi il pasto** invia quello che scrivi (es. "2 fette di pizza margherita e una birra media"); le quantità indicate prevalgono, quelle mancanti vengono stimate come porzioni tipiche.
+
+In entrambi i casi l'app propone alimenti, grammi e valori per 100 g. Prima di aggiungere puoi correggere le quantità e i valori per 100 g (sezione **Valori per 100 g** di ogni voce), togliere voci e scegliere i valori della banca dati svizzera quando c'è un alimento corrispondente. Niente viene salvato senza conferma; nel diario le voci riportano "stima da foto" o "stima da descrizione".
 
 1. Crea una API key in Google AI Studio (https://aistudio.google.com) e limitala alla sola Gemini API.
-2. Incollala in **Impostazioni → Foto del piatto**. Resta solo sul dispositivo.
+2. Incollala in **Impostazioni → Gemini**. Resta solo sul dispositivo.
 
 Se il modello scelto è sovraccarico o non risponde entro 50 secondi, l'app riprova una volta con Gemini 3.5 Flash-Lite e lo indica nella revisione.
 
-**OpenRouter come riserva.** In **Impostazioni → OpenRouter** puoi aggiungere una chiave OpenRouter (https://openrouter.ai): se anche Flash-Lite non risponde, la foto va a OpenRouter. Senza chiave Gemini, OpenRouter viene usato da solo. Il modello predefinito è il router dei modelli gratuiti (`openrouter/free`): nessun costo, al massimo 20 richieste al minuto e 50 al giorno (1000 con almeno 10 crediti acquistati). In alternativa, a pagamento con il credito OpenRouter: Claude Haiku 5.5, GPT-6 Luna, Claude Sonnet 5.5. OpenRouter non conserva i contenuti salvo log attivato nel tuo account; nelle sue impostazioni privacy puoi escludere i fornitori che addestrano sui dati, ma per i modelli gratuiti ne restano pochissimi (il 26/11/2026 uno solo, spesso al limite). Se il fornitore è al limite, l'app riprova da sola fino a due volte.
+**OpenRouter.** In **Impostazioni → OpenRouter** puoi aggiungere una chiave OpenRouter (https://openrouter.ai). In **Impostazioni → Stima del pasto → Prova per primo** scegli quale servizio usare per primo quando hai entrambe le chiavi: con Gemini (predefinito) OpenRouter interviene se anche Flash-Lite non risponde; con OpenRouter, se OpenRouter non risponde si passa a Gemini. Con una sola chiave l'app usa quella. Il modello predefinito è il router dei modelli gratuiti (`openrouter/free`): nessun costo, al massimo 20 richieste al minuto e 50 al giorno (1000 con almeno 10 crediti acquistati). In alternativa, a pagamento con il credito OpenRouter: Claude Haiku 5.5, GPT-6 Luna, Claude Sonnet 5.5. OpenRouter non conserva i contenuti salvo log attivato nel tuo account; nelle sue impostazioni privacy puoi escludere i fornitori che addestrano sui dati, ma per i modelli gratuiti con foto ne restano pochissimi (il 26/11/2026 uno solo, spesso al limite). Se il fornitore è al limite, l'app riprova da sola fino a due volte.
 
-La foto viene ridotta e ripulita dei metadati (anche la posizione) prima dell'invio e non viene conservata. Con una chiave gratuita Google può usare foto e risposte per migliorare i suoi prodotti e farle leggere a revisori umani; con la fatturazione attiva no. Le stime sono approssimative, soprattutto su quantità e condimenti.
+La foto viene ridotta e ripulita dei metadati (anche la posizione) prima dell'invio e non viene conservata. Con una chiave gratuita Google può usare foto, testi e risposte per migliorare i suoi prodotti e farli leggere a revisori umani; con la fatturazione attiva no. Non scrivere dati personali nella descrizione. Le stime sono approssimative, soprattutto su quantità e condimenti.
 
 ## Collegare Dropbox
 
